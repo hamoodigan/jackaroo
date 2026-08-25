@@ -144,13 +144,18 @@ void main() {
     expect(client.state.hands[1], [2]);
 
     // Bots (seats 2, 3) run on the host only and the client follows.
-    await pump(1200); // botThink 900ms + animation
+    // Relaxed pace: ~2.2s think + slow animation + 1.5s pause per bot.
+    for (var i = 0; i < 100; i++) {
+      await pump(200);
+      if ((broker.retained['$base/state']!['seq'] as int) >= 3) break;
+    }
     await host.settle();
-    await pump(1200);
-    await host.settle();
-    await pump(200);
-    await client.settle();
-    await pump();
+    // The client replays remote moves at the slow bot pace; let it catch up.
+    for (var i = 0; i < 100; i++) {
+      await client.settle();
+      await pump(200);
+      if (client.state.turn == host.state.turn && client.phase.value != Phase.animating) break;
+    }
     expect(host.state.turn, client.state.turn);
     expect(host.state.marbles, client.state.marbles);
     expect(host.state.hands, client.state.hands);

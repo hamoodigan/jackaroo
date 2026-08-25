@@ -64,22 +64,24 @@ class BoardView extends StatelessWidget {
                   final phase = c.phase.value;
                   final ts = c.targets;
                   final hl = c.highlightMarbles;
-                  final lm = c.lastMoved;
-                  final paths = c.pathCells;
-                  final moverColor = AppTheme.seat(c.turn);
+                  final trails = c.trails;
+                  final trailColor = <MarbleRef, Color>{
+                    for (final t in trails)
+                      for (final m in t.marbles) m: AppTheme.seat(t.seat),
+                  };
                   final sel = c.selectedMarble.value;
                   return Stack(
                     clipBehavior: Clip.none,
                     children: [
-                      if (paths.isNotEmpty)
+                      if (trails.isNotEmpty)
                         IgnorePointer(
                           child: CustomPaint(
                             size: Size(g.size, g.size),
-                            painter: _PathPainter(g, paths.toList(), moverColor),
+                            painter: _TrailPainter(g, trails.toList()),
                           ),
                         ),
                       for (final t in ts)
-                        _TargetMarker(g: g, target: t, color: moverColor),
+                        _TargetMarker(g: g, target: t, color: AppTheme.gold),
                       for (var s = 0; s < GameConfig.seats; s++)
                         for (var i = 0; i < GameConfig.marblesPerPlayer; i++)
                           _Marble(
@@ -87,7 +89,7 @@ class BoardView extends StatelessWidget {
                             ref: MarbleRef(s, i),
                             pos: c.displayPos[MarbleRef(s, i)] ?? Pos.base,
                             highlighted: hl.contains(MarbleRef(s, i)),
-                            trail: lm.contains(MarbleRef(s, i)),
+                            trailColor: trailColor[MarbleRef(s, i)],
                             selected: sel == MarbleRef(s, i),
                             dim: phase == Phase.cover,
                           ),
@@ -144,7 +146,7 @@ class _Marble extends StatelessWidget {
   final bool highlighted;
   final bool selected;
   final bool dim;
-  final bool trail;
+  final Color? trailColor;
 
   const _Marble({
     required this.g,
@@ -153,7 +155,7 @@ class _Marble extends StatelessWidget {
     required this.highlighted,
     required this.selected,
     required this.dim,
-    this.trail = false,
+    this.trailColor,
   });
 
   @override
@@ -177,7 +179,7 @@ class _Marble extends StatelessWidget {
               dark: AppTheme.seatDark[ref.seat],
               r: r,
               glow: highlighted || selected,
-              trail: trail),
+              trailColor: trailColor),
         ),
       ),
     );
@@ -188,13 +190,13 @@ class _MarbleBody extends StatefulWidget {
   final Color color, dark;
   final double r;
   final bool glow;
-  final bool trail;
+  final Color? trailColor;
   const _MarbleBody(
       {required this.color,
       required this.dark,
       required this.r,
       required this.glow,
-      this.trail = false});
+      this.trailColor});
 
   @override
   State<_MarbleBody> createState() => _MarbleBodyState();
@@ -219,7 +221,8 @@ class _MarbleBodyState extends State<_MarbleBody>
     return AnimatedBuilder(
       animation: _pulse,
       builder: (_, _) {
-        final t = widget.glow || widget.trail ? _pulse.value : 0.0;
+        final trail = widget.trailColor;
+        final t = widget.glow || trail != null ? _pulse.value : 0.0;
         return Container(
           decoration: BoxDecoration(
             shape: BoxShape.circle,
@@ -239,9 +242,9 @@ class _MarbleBodyState extends State<_MarbleBody>
                 blurRadius: r * 0.5,
                 offset: Offset(0, r * 0.3),
               ),
-              if (widget.trail && !widget.glow)
+              if (trail != null && !widget.glow)
                 BoxShadow(
-                  color: AppTheme.gold.withValues(alpha: 0.7 + 0.3 * t),
+                  color: trail.withValues(alpha: 0.7 + 0.3 * t),
                   blurRadius: r * (0.9 + t * 0.6),
                   spreadRadius: r * (0.25 + t * 0.15),
                 ),
@@ -254,8 +257,8 @@ class _MarbleBodyState extends State<_MarbleBody>
             ],
             border: widget.glow
                 ? Border.all(color: Colors.white.withValues(alpha: 0.9), width: r * 0.14)
-                : widget.trail
-                    ? Border.all(color: AppTheme.gold, width: r * 0.16)
+                : trail != null
+                    ? Border.all(color: Colors.white, width: r * 0.16)
                     : null,
           ),
         );
@@ -264,31 +267,57 @@ class _MarbleBodyState extends State<_MarbleBody>
   }
 }
 
-/// Translucent discs in the mover's colour along the possible paths.
-class _PathPainter extends CustomPainter {
+/// History: each played move as a glowing line in its mover's colour, from
+/// the start hole (ringed) to where the marble landed.
+class _TrailPainter extends CustomPainter {
   final BoardGeometry g;
-  final List<int> cells;
-  final Color color;
-  _PathPainter(this.g, this.cells, this.color);
+  final List<MoveTrail> trails;
+  _TrailPainter(this.g, this.trails);
 
   @override
   void paint(Canvas canvas, Size size) {
     final r = g.cellRadius;
-    for (final cell in cells) {
-      final c = g.trackCell(cell);
+    for (final t in trails) {
+      final color = AppTheme.seat(t.seat);
+      if (t.cells.isEmpty) continue;
+      final pts = t.cells.map(g.trackCell).toList();
+      if (pts.length > 1) {
+        final path = Path()..moveTo(pts.first.dx, pts.first.dy);
+        for (final p in pts.skip(1)) {
+          path.lineTo(p.dx, p.dy);
+        }
+        canvas.drawPath(
+            path,
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeCap = StrokeCap.round
+              ..strokeJoin = StrokeJoin.round
+              ..strokeWidth = r * 1.6
+              ..color = color.withValues(alpha: 0.28)
+              ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.4));
+        canvas.drawPath(
+            path,
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeCap = StrokeCap.round
+              ..strokeJoin = StrokeJoin.round
+              ..strokeWidth = r * 0.45
+              ..color = color.withValues(alpha: 0.9));
+      }
+      // Start hole: hollow ring so you can see where it came from.
       canvas.drawCircle(
-          c,
-          r * 1.35,
+          pts.first,
+          r * 1.15,
           Paint()
-            ..color = color.withValues(alpha: 0.28)
-            ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.5));
-      canvas.drawCircle(c, r * 0.55, Paint()..color = color.withValues(alpha: 0.85));
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = r * 0.28
+            ..color = color);
     }
   }
 
   @override
-  bool shouldRepaint(covariant _PathPainter old) =>
-      old.cells != cells || old.color != color || old.g.size != g.size;
+  bool shouldRepaint(covariant _TrailPainter old) =>
+      old.trails != trails || old.g.size != g.size;
 }
 
 class _TargetMarker extends StatefulWidget {

@@ -205,7 +205,6 @@ void main() {
     arrange(c, [card(3)], marbles: {(0, 0): 4});
     c.tapCard(card(3));
     expect(c.targets.map((t) => t.pos).toList(), [7]);
-    expect(c.pathCells, {Pos.abs(0, 5), Pos.abs(0, 6), Pos.abs(0, 7)});
     c.tapCard(card(3)); // second tap plays
     await settle(c);
     expect(c.state.marbles[0][0], 7);
@@ -229,7 +228,6 @@ void main() {
     c.tapBackground();
     expect(c.phase.value, Phase.pickCard);
     expect(c.highlightMarbles, isEmpty);
-    expect(c.pathCells, isEmpty);
   });
 
   test('10 and Queen: power button appears next to marble moves', () async {
@@ -258,5 +256,26 @@ void main() {
     expect(q.state.hands[0], [card(5)]);
     expect(q.state.hands[1], isEmpty);
     expect(q.state.turn, 2);
+  });
+
+  test('a move leaves a trail in the mover colour until the human moves', () async {
+    final c = GameController(
+      players: const [
+        PlayerSlot(seat: 0, name: 'Me'),
+        PlayerSlot(seat: 1, name: 'B1', isBot: true),
+        PlayerSlot(seat: 2, name: 'B2', isBot: true),
+        PlayerSlot(seat: 3, name: 'B3', isBot: true),
+      ],
+      rules: const RuleSet(),
+      hideHands: false,
+    )..onInit();
+    arrange(c, [card(3)], marbles: {(0, 0): 4});
+    c.tapCard(card(3));
+    c.tapCard(card(3));
+    await settle(c);
+    expect(c.trails.length, 1);
+    expect(c.trails.first.seat, 0);
+    expect(c.trails.first.cells, [Pos.abs(0, 4), Pos.abs(0, 5), Pos.abs(0, 6), Pos.abs(0, 7)]);
+    expect(c.trails.first.marbles, {const MarbleRef(0, 0)});
   });
 }

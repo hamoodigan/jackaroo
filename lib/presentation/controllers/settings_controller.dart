@@ -11,6 +11,7 @@ class SettingsController extends GetxController {
 
   late final locale = store.locale.obs;
   late final hideHands = store.hideHands.obs;
+  late final botPace = store.botPace.obs;
 
   @override
   void onInit() {
@@ -20,6 +21,7 @@ class SettingsController extends GetxController {
     ever(audio.sfxEnabled, (v) => store.sfx = v);
     ever(audio.musicEnabled, (v) => store.music = v);
     ever(hideHands, (v) => store.hideHands = v);
+    ever(botPace, (v) => store.botPace = v);
     ever(locale, (v) {
       store.locale = v;
       Get.updateLocale(Locale(v));

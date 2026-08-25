@@ -14,6 +14,7 @@ import '../../domain/entities/move.dart';
 import '../../domain/entities/player.dart';
 import '../../domain/entities/position.dart';
 import '../../domain/entities/rules.dart';
+import 'settings_controller.dart';
 
 enum Phase {
   cover, // "pass the device" screen between human turns
@@ -82,8 +83,17 @@ class GameController extends GetxController {
   /// The 10 / Queen power available for the selected card, if any.
   final specialMove = Rxn<Move>();
 
-  /// Marbles moved by the last bot / remote move, ringed until the next move.
-  final lastMoved = <MarbleRef>{}.obs;
+  /// Paths of the moves played since the local player last moved, each in
+  /// its mover's colour, so a human can review what the bots did.
+  final trails = <MoveTrail>[].obs;
+
+  double get _pace {
+    try {
+      return Get.find<SettingsController>().botPace.value;
+    } catch (_) {
+      return 1.0;
+    }
+  }
   final winnerTeam = RxnInt();
 
   /// Where each marble is drawn (lags the engine during animations).
@@ -186,7 +196,7 @@ class GameController extends GetxController {
     if (current.isBot) {
       phase.value = Phase.botTurn;
       message.value = 'bot_thinking'.trParams({'name': current.name});
-      if (isHost) Future.delayed(GameConfig.botThink * GameConfig.botSlow, _botPlay);
+      if (isHost) Future.delayed(GameConfig.botThink * _pace, _botPlay);
     } else if (!isLocalSeat(turn)) {
       phase.value = Phase.botTurn; // remote human: just wait
       message.value = 'waiting_for'.trParams({'name': current.name});
@@ -271,7 +281,6 @@ class GameController extends GetxController {
         .where((m) => m.marble != null && m.kind != MoveKind.swap)
         .map((m) => Target(m.marble!.seat, m.to))
         .toSet());
-    pathCells.addAll(forCard.expand(engine.pathCells));
     phase.value = Phase.pickMarble;
     final single = forCard.length == 1 && forCard.first.kind != MoveKind.split;
     message.value = single
@@ -359,9 +368,6 @@ class GameController extends GetxController {
   void _selectMarble(MarbleRef ref) {
     selectedMarble.value = ref;
     final mine = _cardMoves.where((m) => m.marble == ref).toList();
-    pathCells
-      ..clear()
-      ..addAll(mine.expand(engine.pathCells));
     if (mine.first.kind == MoveKind.swap) {
       _swapMode = true;
       highlightMarbles.assignAll(mine.map((m) => m.marble2!));
@@ -397,9 +403,6 @@ class GameController extends GetxController {
         return;
       }
       selectedMarble.value = marbles.first;
-      pathCells
-        ..clear()
-        ..addAll(hits.expand(engine.pathCells));
       phase.value = Phase.pickTarget;
     }
     if (phase.value == Phase.pickTarget) {
@@ -526,13 +529,18 @@ class GameController extends GetxController {
     final events = engine.apply(mv);
     final effect = engine.lastEffect;
     if (effect != null) _showEffect(effect);
-    lastMoved.clear();
+    final local = isLocalSeat(mv.seat);
+    if (local) trails.clear(); // my move starts a fresh review window
     tick.value++;
-    final slow = isLocalSeat(mv.seat) ? 1.0 : GameConfig.botSlow;
+    final slow = local ? 1.0 : 1 + (GameConfig.botSlow - 1) * _pace;
     await _animate(mv, events, slow);
     if (_disposed) return;
-    if (!isLocalSeat(mv.seat)) {
-      lastMoved.addAll(events.where((e) => !e.captured).map((e) => e.marble));
+    final trail = MoveTrail.fromEvents(mv.seat, events);
+    if (trail != null) trails.add(trail);
+    if (!local) {
+      // Breathing room after a bot / remote move so it can be read.
+      await Future.delayed(GameConfig.botPause * _pace);
+      if (_disposed) return;
     }
     if (mv.kind == MoveKind.discard) {
       await Future.delayed(const Duration(milliseconds: 500));
@@ -604,4 +612,32 @@ class GameController extends GetxController {
   PlayingCard card(int id) => PlayingCard(id);
   int teamOf(int seat) => seat % 2;
   String teamName(int team) => team == 0 ? 'team_a'.tr : 'team_b'.tr;
+}
+
+
+/// One played move for the board to draw: who moved, the holes crossed and
+/// the marbles that ended up somewhere new.
+class MoveTrail {
+  final int seat;
+
+  /// Absolute track holes from the start hole to the end, in order.
+  final List<int> cells;
+  final Set<MarbleRef> marbles;
+  const MoveTrail(this.seat, this.cells, this.marbles);
+
+  static MoveTrail? fromEvents(int seat, List<MoveEvent> events) {
+    final cells = <int>[];
+    final marbles = <MarbleRef>{};
+    for (final e in events) {
+      if (e.captured) continue;
+      marbles.add(e.marble);
+      if (Pos.isTrack(e.from)) cells.add(Pos.abs(e.marble.seat, e.from));
+      cells.addAll(e.path);
+      if (Pos.isTrack(e.to) && (e.path.isEmpty || e.path.last != Pos.abs(e.marble.seat, e.to))) {
+        cells.add(Pos.abs(e.marble.seat, e.to));
+      }
+    }
+    if (marbles.isEmpty) return null;
+    return MoveTrail(seat, cells, marbles);
+  }
 }

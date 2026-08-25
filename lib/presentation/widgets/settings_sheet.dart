@@ -67,6 +67,21 @@ class SettingsSheet extends StatelessWidget {
                   value: s.audio.musicEnabled.value,
                   onChanged: (v) => s.audio.musicEnabled.value = v,
                 ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.smart_toy_rounded, color: AppTheme.gold),
+                  title: Text('bot_pace'.tr),
+                  trailing: SegmentedButton<double>(
+                    showSelectedIcon: false,
+                    segments: [
+                      ButtonSegment(value: 1.0, label: Text('pace_relaxed'.tr)),
+                      ButtonSegment(value: 0.55, label: Text('pace_normal'.tr)),
+                      ButtonSegment(value: 0.25, label: Text('pace_fast'.tr)),
+                    ],
+                    selected: {s.botPace.value},
+                    onSelectionChanged: (v) => s.botPace.value = v.first,
+                  ),
+                ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   secondary: const Icon(Icons.visibility_off_rounded, color: AppTheme.gold),

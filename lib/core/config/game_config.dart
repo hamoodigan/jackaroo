@@ -28,10 +28,12 @@ class GameConfig {
   /// Animation / pacing.
   static const Duration marbleStep = Duration(milliseconds: 60);
   static const Duration marbleHop = Duration(milliseconds: 320);
-  static const Duration botThink = Duration(milliseconds: 900);
+  /// Relaxed-pace bot timings (scaled by the "bot pace" setting).
+  static const Duration botThink = Duration(milliseconds: 2200);
+  static const Duration botPause = Duration(milliseconds: 1500);
 
   /// Bots (and remote players) animate this much slower than local taps so
   /// humans can follow what happened.
-  static const double botSlow = 1.7;
+  static const double botSlow = 2.6;
   static const Duration dealDelay = Duration(milliseconds: 400);
 }

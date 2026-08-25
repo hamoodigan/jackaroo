@@ -31,6 +31,10 @@ class LocalStorage {
   String get playerName => _p.getString('playerName') ?? '';
   set playerName(String v) => _p.setString('playerName', v);
 
+  /// 1.0 relaxed, 0.55 normal, 0.25 fast — multiplies every bot delay.
+  double get botPace => _p.getDouble('botPace') ?? 1.0;
+  set botPace(double v) => _p.setDouble('botPace', v);
+
   bool get hideHands => _p.getBool('hideHands') ?? true;
   set hideHands(bool v) => _p.setBool('hideHands', v);
 
