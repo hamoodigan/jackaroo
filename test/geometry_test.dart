@@ -52,9 +52,9 @@ void main() {
     }
   });
 
-  test('home lane starts one pitch past the threshold hole (rel 75)', () {
+  test('home lane starts one pitch past the branch hole (rel 74)', () {
     for (var s = 0; s < 4; s++) {
-      final threshold = g.trackCell(Pos.abs(s, GameConfig.trackLength - 1));
+      final threshold = g.trackCell(Pos.abs(s, GameConfig.homeBranch));
       expect((g.homeCell(s, 0) - threshold).distance, closeTo(g.p, 0.05));
       expect((g.homeCell(s, 3) - g.centre).distance,
           lessThan((g.homeCell(s, 0) - g.centre).distance));

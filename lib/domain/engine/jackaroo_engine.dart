@@ -86,13 +86,13 @@ class JackarooEngine {
       case 1: // Ace: exit, 1 or 11
         add(_exit(seat, cardId, m));
         for (final r in own) {
-          add(_advance(seat, cardId, r, 1, m));
-          add(_advance(seat, cardId, r, 11, m));
+          out.addAll(_advances(seat, cardId, r, 1, m));
+          out.addAll(_advances(seat, cardId, r, 11, m));
         }
       case 13: // King: exit or 13
         add(_exit(seat, cardId, m));
         for (final r in own) {
-          add(_advance(seat, cardId, r, 13, m));
+          out.addAll(_advances(seat, cardId, r, 13, m));
         }
       case 11: // Jack: swap
         out.addAll(_swaps(seat, cardId));
@@ -102,33 +102,33 @@ class JackarooEngine {
         }
       case 5:
         for (final r in own) {
-          add(_advance(seat, cardId, r, 5, m));
+          out.addAll(_advances(seat, cardId, r, 5, m));
         }
         if (state.rules.fiveMovesAny) {
           for (var s = 0; s < GameConfig.seats; s++) {
             if (s == _controlledSeat(seat)) continue;
             for (var i = 0; i < GameConfig.marblesPerPlayer; i++) {
               if (Pos.isTrack(m[s][i])) {
-                add(_advance(seat, cardId, MarbleRef(s, i), 5, m));
+                out.addAll(_advances(seat, cardId, MarbleRef(s, i), 5, m));
               }
             }
           }
         }
       case 7:
         for (final r in own) {
-          add(_advance(seat, cardId, r, 7, m));
+          out.addAll(_advances(seat, cardId, r, 7, m));
         }
         if (state.rules.sevenSplit) out.addAll(_splits(seat, cardId, own));
       case 10:
         for (final r in own) {
-          add(_advance(seat, cardId, r, 10, m));
+          out.addAll(_advances(seat, cardId, r, 10, m));
         }
         if (state.rules.tenSkip && state.hands[nextSeat(seat)].isNotEmpty) {
           out.add(Move(seat: seat, cardId: cardId, kind: MoveKind.forceDiscard));
         }
       case 12:
         for (final r in own) {
-          add(_advance(seat, cardId, r, 12, m));
+          out.addAll(_advances(seat, cardId, r, 12, m));
         }
         if (state.rules.queenSteal && state.hands[nextSeat(seat)].isNotEmpty) {
           out.add(Move(seat: seat, cardId: cardId, kind: MoveKind.steal));
@@ -136,7 +136,7 @@ class JackarooEngine {
       default:
         final n = rank == 12 ? 12 : rank;
         for (final r in own) {
-          add(_advance(seat, cardId, r, n, m));
+          out.addAll(_advances(seat, cardId, r, n, m));
         }
     }
     return out;
@@ -207,57 +207,68 @@ class JackarooEngine {
     );
   }
 
-  Move? _advance(
+  /// Forward moves for one marble: the track hole and/or the home slot.
+  List<Move> _advances(
       int seat, int cardId, MarbleRef ref, int n, List<List<int>> m) {
     final p = m[ref.seat][ref.idx];
     final owner = ref.seat;
-    if (Pos.isBase(p)) return null;
+    if (Pos.isBase(p)) return const [];
 
     if (Pos.isHome(p)) {
-      if (!_sameTeam(seat, owner)) return null;
+      if (!_sameTeam(seat, owner)) return const [];
       final h = Pos.homeIndex(p);
       final nh = h + n;
-      if (nh >= _homeSize) return null;
+      if (nh >= _homeSize) return const [];
       for (var k = h + 1; k <= nh; k++) {
-        if (m[owner].contains(Pos.home(k))) return null;
+        if (m[owner].contains(Pos.home(k))) return const [];
       }
-      return Move(
-          seat: seat,
-          cardId: cardId,
-          kind: MoveKind.advance,
-          marble: ref,
-          steps: n,
-          to: Pos.home(nh));
+      return [
+        Move(
+            seat: seat,
+            cardId: cardId,
+            kind: MoveKind.advance,
+            marble: ref,
+            steps: n,
+            to: Pos.home(nh))
+      ];
     }
 
+    final out = <Move>[];
     final r = p;
     final nr = r + n;
-    if (nr < _track) {
-      if (_blocked(_forwardPath(owner, r, nr), m)) return null;
-      if (!_canLand(owner, Pos.abs(owner, nr), m)) return null;
-      return Move(
+    // Track move; passing the base hole simply wraps around the loop.
+    if (!_blocked(_forwardPath(owner, r, nr), m) &&
+        _canLand(owner, Pos.abs(owner, nr), m)) {
+      out.add(Move(
           seat: seat,
           cardId: cardId,
           kind: MoveKind.advance,
           marble: ref,
           steps: n,
-          to: nr);
+          to: nr % _track));
     }
-    // Entering the home lane.
-    if (!_sameTeam(seat, owner)) return null;
-    final h = nr - _track;
-    if (h >= _homeSize) return null;
-    if (_blocked(_forwardPath(owner, r, _track), m)) return null;
-    for (var k = 0; k <= h; k++) {
-      if (m[owner].contains(Pos.home(k))) return null;
+    // Turning into the home lane (only from at/before the branch hole).
+    if (_sameTeam(seat, owner) && r <= GameConfig.homeBranch) {
+      final h = nr - GameConfig.homeBranch - 1;
+      if (h >= 0 &&
+          h < _homeSize &&
+          !_blocked(_forwardPath(owner, r, GameConfig.homeBranch + 1), m)) {
+        var free = true;
+        for (var k = 0; k <= h; k++) {
+          if (m[owner].contains(Pos.home(k))) free = false;
+        }
+        if (free) {
+          out.add(Move(
+              seat: seat,
+              cardId: cardId,
+              kind: MoveKind.advance,
+              marble: ref,
+              steps: n,
+              to: Pos.home(h)));
+        }
+      }
     }
-    return Move(
-        seat: seat,
-        cardId: cardId,
-        kind: MoveKind.advance,
-        marble: ref,
-        steps: n,
-        to: Pos.home(h));
+    return out;
   }
 
   Move? _back(int seat, int cardId, MarbleRef ref, int n, List<List<int>> m) {
@@ -314,25 +325,25 @@ class JackarooEngine {
     final out = <Move>[];
     for (final a in own) {
       for (var k = 1; k < 7; k++) {
-        final first = _advance(seat, cardId, a, k, state.marbles);
-        if (first == null) continue;
-        final sim = _copy(state.marbles);
-        _applyMovement(first, sim, null);
-        for (final b in own) {
-          if (a == b) continue;
-          final second = _advance(seat, cardId, b, 7 - k, sim);
-          if (second == null) continue;
-          out.add(Move(
-            seat: seat,
-            cardId: cardId,
-            kind: MoveKind.split,
-            marble: a,
-            steps: k,
-            to: first.to,
-            marble2: b,
-            steps2: 7 - k,
-            to2: second.to,
-          ));
+        for (final first in _advances(seat, cardId, a, k, state.marbles)) {
+          final sim = _copy(state.marbles);
+          _applyMovement(first, sim, null);
+          for (final b in own) {
+            if (a == b) continue;
+            for (final second in _advances(seat, cardId, b, 7 - k, sim)) {
+              out.add(Move(
+                seat: seat,
+                cardId: cardId,
+                kind: MoveKind.split,
+                marble: a,
+                steps: k,
+                to: first.to,
+                marble2: b,
+                steps2: 7 - k,
+                to2: second.to,
+              ));
+            }
+          }
         }
       }
     }
@@ -418,17 +429,19 @@ class JackarooEngine {
       events?.add(MoveEvent(ref, from, to, path: path));
     }
 
-    List<int> pathFor(MarbleRef ref, int from, int to, bool forward) {
+    List<int> pathFor(MarbleRef ref, int from, int to, bool forward,
+        [int? steps]) {
       if (!Pos.isTrack(from)) return const [];
       final owner = ref.seat;
+      final n = steps ?? move.steps;
       final cells = <int>[];
       if (forward) {
-        final end = Pos.isHome(to) ? _track - 1 : to;
+        final end = Pos.isHome(to) ? GameConfig.homeBranch : from + n;
         for (var r = from + 1; r <= end; r++) {
-          cells.add(Pos.abs(owner, r));
+          cells.add(Pos.abs(owner, r)); // Pos.abs wraps past the base
         }
       } else {
-        for (var k = 1; k <= move.steps; k++) {
+        for (var k = 1; k <= n; k++) {
           cells.add(Pos.abs(owner, (from - k + _track) % _track));
         }
       }
@@ -443,7 +456,8 @@ class JackarooEngine {
         final from = m[ref.seat][ref.idx];
         final rank = PlayingCard(move.cardId).rank;
         if (rank == 13 && state.rules.kingBurnsPath && Pos.isTrack(from)) {
-          final end = Pos.isHome(move.to) ? _track : move.to;
+          final end =
+              Pos.isHome(move.to) ? GameConfig.homeBranch + 1 : from + move.steps;
           for (final c in _forwardPath(ref.seat, from, end)) {
             final occ = _occupant(c, m);
             if (occ == null || occ.seat == ref.seat) continue;
@@ -471,7 +485,7 @@ class JackarooEngine {
         final fa = m[a.seat][a.idx];
         place(a, move.to, path: pathFor(a, fa, move.to, true));
         final fb = m[b.seat][b.idx];
-        place(b, move.to2, path: pathFor(b, fb, move.to2, true));
+        place(b, move.to2, path: pathFor(b, fb, move.to2, true, move.steps2));
       case MoveKind.discard:
       case MoveKind.forceDiscard:
       case MoveKind.steal:

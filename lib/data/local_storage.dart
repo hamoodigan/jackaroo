@@ -19,6 +19,15 @@ class LocalStorage {
   bool get music => _p.getBool('music') ?? false;
   set music(bool v) => _p.setBool('music', v);
 
+  /// Stable identity across reloads so a player can rejoin their seat.
+  String get playerId => _p.getString('playerId') ?? '';
+  set playerId(String v) => _p.setString('playerId', v);
+
+  /// Last online room (code) this device was in, for "Rejoin".
+  String? get lastRoom => _p.getString('lastRoom');
+  set lastRoom(String? v) =>
+      v == null ? _p.remove('lastRoom') : _p.setString('lastRoom', v);
+
   String get playerName => _p.getString('playerName') ?? '';
   set playerName(String v) => _p.setString('playerName', v);
 

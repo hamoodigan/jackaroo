@@ -80,6 +80,19 @@ class _EntryFormState extends State<_EntryForm> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(22, 10, 22, 30),
       children: [
+        Obx(() {
+          final saved = c.savedRoom.value;
+          if (saved == null) return const SizedBox.shrink();
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 22),
+            child: _Big(
+              label: 'rejoin_room'.trParams({'code': saved}),
+              icon: Icons.replay_rounded,
+              busy: c.busy.value,
+              onTap: c.rejoin,
+            ),
+          );
+        }),
         Text('your_name'.tr.toUpperCase(), style: _label),
         const SizedBox(height: 8),
         TextFormField(

@@ -42,7 +42,22 @@ class OnlineController extends GetxController {
   final error = RxnString();
   final started = false.obs;
 
-  late final String myId = net.clientId;
+  late final String myId = _stableId();
+  final savedRoom = RxnString();
+
+  String _stableId() {
+    var id = store.playerId;
+    if (id.isEmpty) {
+      id = 'p-${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}-${Random().nextInt(1 << 20).toRadixString(36)}';
+      store.playerId = id;
+    }
+    return id;
+  }
+
+  void _remember(String? code) {
+    store.lastRoom = code;
+    savedRoom.value = code;
+  }
   final _rng = Random();
   Map<String, dynamic>? _snapshot;
   int _snapshotSeq = 0;
@@ -57,6 +72,7 @@ class OnlineController extends GetxController {
     super.onInit();
     name.value = store.playerName;
     ever(name, (v) => store.playerName = v);
+    savedRoom.value = store.lastRoom;
   }
 
   String get _displayName => name.value.trim().isEmpty ? 'Player' : name.value.trim();
@@ -86,6 +102,7 @@ class OnlineController extends GetxController {
     net.subscribe('$base/join', _onJoin);
     net.subscribe('$base/leave', _onLeave);
     _publishLobby();
+    _remember(code.value);
   }
 
   void _publishLobby() {
@@ -189,6 +206,7 @@ class OnlineController extends GetxController {
     if (mySeat != null) {
       busy.value = false;
       _joinTimer?.cancel();
+      _remember(code.value);
     }
     final st = j['started'] == true;
     if (st && !started.value && mySeat != null) {
@@ -198,7 +216,7 @@ class OnlineController extends GetxController {
   }
 
   void _onState(Map<String, dynamic> j) {
-    if (isHost.value) return;
+    if (isHost.value && _launched) return;
     _snapshot = Map<String, dynamic>.from(j['state'] ?? {});
     _snapshotSeq = j['seq'] ?? 0;
     if (started.value) _tryLaunchClient();
@@ -242,9 +260,89 @@ class OnlineController extends GetxController {
     Get.offNamed('/game');
   }
 
+  /// Reconnects to the remembered room: resumes the lobby, or the running
+  /// game from the host's retained snapshot (works for host and guests).
+  Future<void> rejoin() async {
+    final c = savedRoom.value;
+    if (c == null) return;
+    if (!await _connect()) return;
+    leave(silent: true, forget: false);
+    code.value = c;
+    busy.value = true;
+    Map<String, dynamic>? lobby;
+    void onLobby(Map<String, dynamic> j) => lobby = j;
+    net.subscribe('$base/lobby', onLobby);
+    net.subscribe('$base/state', _onState);
+    // Give the retained messages a moment to arrive.
+    for (var i = 0; i < 40 && lobby == null; i++) {
+      await Future.delayed(const Duration(milliseconds: 200));
+    }
+    net.unsubscribe('$base/lobby');
+    final j = lobby;
+    if (j == null || (j['players'] as List?)?.isEmpty != false) {
+      busy.value = false;
+      error.value = 'rejoin_failed'.tr;
+      leave(silent: true);
+      return;
+    }
+    final list = (j['players'] as List)
+        .map((p) => LobbyPlayer.fromJson(Map<String, dynamic>.from(p)))
+        .toList();
+    players.assignAll(list);
+    if (j['rules'] != null) {
+      rules.value = RuleSet.fromJson(Map<String, dynamic>.from(j['rules']));
+    }
+    final amHost = j['host'] == myId;
+    isHost.value = amHost;
+    started.value = j['started'] == true;
+    if (mySeat == null) {
+      busy.value = false;
+      error.value = 'rejoin_failed'.tr;
+      leave(silent: true);
+      return;
+    }
+    busy.value = false;
+    if (amHost) {
+      net.subscribe('$base/join', _onJoin);
+      net.subscribe('$base/leave', _onLeave);
+      if (!started.value) {
+        _publishLobby();
+        return; // back in the lobby
+      }
+      // Wait for the snapshot, then resume as the authority.
+      for (var i = 0; i < 40 && _snapshot == null; i++) {
+        await Future.delayed(const Duration(milliseconds: 200));
+      }
+      if (_snapshot == null) {
+        error.value = 'rejoin_failed'.tr;
+        leave(silent: true);
+        return;
+      }
+      final slots = <PlayerSlot>[
+        for (final p in players)
+          PlayerSlot(seat: p.seat, name: p.isOpen ? 'Bot ${p.seat + 1}' : p.name, isBot: p.isOpen),
+      ];
+      _launch(
+          slots,
+          OnlineSession(
+            net: net,
+            base: base,
+            mySeat: 0,
+            isHost: true,
+            initialState: _snapshot,
+            initialSeq: _snapshotSeq,
+          ));
+      return;
+    }
+    // Guest: keep listening; the lobby/state handlers launch when ready.
+    net.subscribe('$base/lobby', _onLobby);
+    if (started.value) _tryLaunchClient();
+  }
+
   /// Leaves the current room (host clears the retained lobby).
-  void leave({bool silent = false}) {
+  void leave({bool silent = false, bool forget = true}) {
     _joinTimer?.cancel();
+    if (forget) _remember(null);
     if (code.value != null) {
       if (isHost.value) {
         net.clearRetained('$base/lobby');

@@ -41,10 +41,15 @@ Built a complete Flutter Jackaroo game from zero in one session (offline pass-an
 - `test/probe_room_test.dart` prints a room's retained lobby/state: `flutter test test/probe_room_test.dart --dart-define=ROOM=CODE` — handy for online debugging.
 - Board photo + detected hole coordinates lived only in the session scratchpad (now gone); the numeric template in `board_geometry.dart` is the source of truth.
 
+## Added after the handoff was first written (same day, 2026-08-25 afternoon)
+- Bots/remote players animate 1.7× slower (`GameConfig.botSlow`) and every marble they moved keeps a gold ring (`GameController.lastMoved`) until the next move.
+- Base hole = the corner (apex) hole beside the seat's pocket; the home lane branches at rel 74 (`GameConfig.homeBranch`), two holes before the base. Consequences in the engine: `_advances()` returns BOTH the track hole and the home slot when both fit (player chooses), track moves wrap past the base (a marble that misses the lane goes around again). Base hole is tinted + ringed in the seat colour.
+- Rejoin: stable `LocalStorage.playerId`, `lastRoom` code, "Rejoin room XXXX" button on the Online screen (`OnlineController.rejoin`): re-reads retained lobby + state; host resumes as authority with `initialState`, guests relaunch from the snapshot. Quitting a game or leaving the lobby forgets the room. Verified only by `test/online_flow_test.dart` "rejoin" (controller level) — the UI flow was NOT exercised live because the user was using the PC.
+
 ## Current state & next steps
 - Done & live: octagon board, all cards incl. new 10/Queen powers + toggles, card guide (home / in-game ? / pause menu), online rooms, EN/AR, PWA + APK, docs, 53 tests.
 - Unverified: real phones (only desktop Chrome incl. a narrow window), iOS Safari audio (needs first tap), Arabic RTL layout, landscape, long online sessions.
-- Missing online features: reconnect/rejoin after a page refresh (game is lost), host leaving mid-game, play-again in an online room (buttons hidden), spectators.
+- Missing online features: host leaving permanently mid-game (guests can only wait / rejoin later), play-again in an online room (buttons hidden), spectators. Rejoin exists but its UI path is untested live.
 - Recommended next: (1) test on the user's and cousin's phones; (2) add rejoin (client re-subscribes to `state` retained snapshot with its stored seat/id); (3) optional private broker.
 - Working tree clean, all pushed (last commit `5989982`).
 

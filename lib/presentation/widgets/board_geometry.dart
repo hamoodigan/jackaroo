@@ -10,10 +10,10 @@ import '../../domain/entities/position.dart';
 /// The track is a loop of 76 holes with eight apexes: four straight
 /// diagonal edges (5 holes) and four dented orthogonal sides (5 holes
 /// diagonally in, 6 straight, 5 diagonally out). Marbles travel CLOCKWISE.
-/// Each seat owns one diagonal corner: its base (entry) hole is the 4th hole
-/// of that diagonal edge, the 4 home holes run from the previous hole along
-/// the corner's diagonal toward the centre, and its 4 waiting holes form a
-/// diamond in the notch of the next orthogonal side.
+/// Each seat owns one diagonal corner: its base (entry) hole is the corner
+/// (apex) hole next to its waiting pocket, the 4 home holes branch from the
+/// hole two before it and run along the corner's diagonal toward the
+/// centre, and its 4 waiting holes form a diamond in the adjacent notch.
 ///
 /// Seat 0 = bottom-right corner (bottom side), 1 = bottom-left, 2 = top-left,
 /// 3 = top-right — consecutive seats follow the direction of play.
@@ -51,26 +51,26 @@ class BoardGeometry {
     const apex0 = Offset(-_ax, -_ay);
     const apex1 = Offset(_ax, -_ay);
     final t = <Offset>[];
-    t.add(apex0 + const Offset(-_s, _s)); // 0 base hole (on the diagonal edge)
-    t.add(apex0); // 1
+    t.add(apex0); // 0 base hole = the corner
     for (var k = 1; k <= 4; k++) {
-      t.add(apex0 + Offset(k * _s, k * _s)); // 2..5 diagonally in
+      t.add(apex0 + Offset(k * _s, k * _s)); // 1..4 diagonally in
     }
     for (var i = 0; i < 6; i++) {
-      t.add(Offset(-_halfRow + i, -_rowY)); // 6..11 straight
+      t.add(Offset(-_halfRow + i, -_rowY)); // 5..10 straight
     }
     for (var k = 1; k <= 4; k++) {
-      t.add(Offset(_halfRow + k * _s, -_rowY - k * _s)); // 12..15 out
+      t.add(Offset(_halfRow + k * _s, -_rowY - k * _s)); // 11..14 out
     }
-    t.add(apex1); // 16
-    t.add(apex1 + const Offset(_s, _s)); // 17
-    t.add(apex1 + const Offset(2 * _s, 2 * _s)); // 18
+    t.add(apex1); // 15
+    for (var k = 1; k <= 3; k++) {
+      t.add(apex1 + Offset(k * _s, k * _s)); // 16..18 along the next edge
+    }
     assert(t.length == GameConfig.cellsPerSide);
     return t;
   }
 
-  /// Threshold hole (rel −1) of the template seat.
-  static final Offset _threshold = _track[0] + const Offset(-_s, _s);
+  /// Branch hole (rel 74, two before the base) of the template seat.
+  static final Offset _threshold = _track[0] + const Offset(-2 * _s, 2 * _s);
 
   static final List<Offset> _home = List.generate(
     GameConfig.homeSize,

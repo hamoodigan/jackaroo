@@ -64,6 +64,7 @@ class BoardView extends StatelessWidget {
                   final phase = c.phase.value;
                   final ts = c.targets;
                   final hl = c.highlightMarbles;
+                  final lm = c.lastMoved;
                   final sel = c.selectedMarble.value;
                   return Stack(
                     clipBehavior: Clip.none,
@@ -76,6 +77,7 @@ class BoardView extends StatelessWidget {
                             ref: MarbleRef(s, i),
                             pos: c.displayPos[MarbleRef(s, i)] ?? Pos.base,
                             highlighted: hl.contains(MarbleRef(s, i)),
+                            trail: lm.contains(MarbleRef(s, i)),
                             selected: sel == MarbleRef(s, i),
                             dim: phase == Phase.cover,
                           ),
@@ -128,6 +130,7 @@ class _Marble extends StatelessWidget {
   final bool highlighted;
   final bool selected;
   final bool dim;
+  final bool trail;
 
   const _Marble({
     required this.g,
@@ -136,6 +139,7 @@ class _Marble extends StatelessWidget {
     required this.highlighted,
     required this.selected,
     required this.dim,
+    this.trail = false,
   });
 
   @override
@@ -154,7 +158,12 @@ class _Marble extends StatelessWidget {
         child: AnimatedOpacity(
           duration: const Duration(milliseconds: 200),
           opacity: dim ? 0.35 : 1,
-          child: _MarbleBody(color: color, dark: AppTheme.seatDark[ref.seat], r: r, glow: highlighted || selected),
+          child: _MarbleBody(
+              color: color,
+              dark: AppTheme.seatDark[ref.seat],
+              r: r,
+              glow: highlighted || selected,
+              trail: trail),
         ),
       ),
     );
@@ -165,7 +174,13 @@ class _MarbleBody extends StatefulWidget {
   final Color color, dark;
   final double r;
   final bool glow;
-  const _MarbleBody({required this.color, required this.dark, required this.r, required this.glow});
+  final bool trail;
+  const _MarbleBody(
+      {required this.color,
+      required this.dark,
+      required this.r,
+      required this.glow,
+      this.trail = false});
 
   @override
   State<_MarbleBody> createState() => _MarbleBodyState();
@@ -190,7 +205,7 @@ class _MarbleBodyState extends State<_MarbleBody>
     return AnimatedBuilder(
       animation: _pulse,
       builder: (_, _) {
-        final t = widget.glow ? _pulse.value : 0.0;
+        final t = widget.glow || widget.trail ? _pulse.value : 0.0;
         return Container(
           decoration: BoxDecoration(
             shape: BoxShape.circle,
@@ -210,6 +225,12 @@ class _MarbleBodyState extends State<_MarbleBody>
                 blurRadius: r * 0.5,
                 offset: Offset(0, r * 0.3),
               ),
+              if (widget.trail && !widget.glow)
+                BoxShadow(
+                  color: AppTheme.gold.withValues(alpha: 0.7 + 0.3 * t),
+                  blurRadius: r * (0.9 + t * 0.6),
+                  spreadRadius: r * (0.25 + t * 0.15),
+                ),
               if (widget.glow)
                 BoxShadow(
                   color: Colors.white.withValues(alpha: 0.55 + 0.4 * t),
@@ -219,7 +240,9 @@ class _MarbleBodyState extends State<_MarbleBody>
             ],
             border: widget.glow
                 ? Border.all(color: Colors.white.withValues(alpha: 0.9), width: r * 0.14)
-                : null,
+                : widget.trail
+                    ? Border.all(color: AppTheme.gold, width: r * 0.16)
+                    : null,
           ),
         );
       },

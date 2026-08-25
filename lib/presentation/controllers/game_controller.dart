@@ -78,6 +78,9 @@ class GameController extends GetxController {
 
   /// The 10 / Queen power available for the selected card, if any.
   final specialMove = Rxn<Move>();
+
+  /// Marbles moved by the last bot / remote move, ringed until the next move.
+  final lastMoved = <MarbleRef>{}.obs;
   final winnerTeam = RxnInt();
 
   /// Where each marble is drawn (lags the engine during animations).
@@ -180,7 +183,7 @@ class GameController extends GetxController {
     if (current.isBot) {
       phase.value = Phase.botTurn;
       message.value = 'bot_thinking'.trParams({'name': current.name});
-      if (isHost) Future.delayed(GameConfig.botThink, _botPlay);
+      if (isHost) Future.delayed(GameConfig.botThink * GameConfig.botSlow, _botPlay);
     } else if (!isLocalSeat(turn)) {
       phase.value = Phase.botTurn; // remote human: just wait
       message.value = 'waiting_for'.trParams({'name': current.name});
@@ -474,9 +477,14 @@ class GameController extends GetxController {
     final events = engine.apply(mv);
     final effect = engine.lastEffect;
     if (effect != null) _showEffect(effect);
+    lastMoved.clear();
     tick.value++;
-    await _animate(mv, events);
+    final slow = isLocalSeat(mv.seat) ? 1.0 : GameConfig.botSlow;
+    await _animate(mv, events, slow);
     if (_disposed) return;
+    if (!isLocalSeat(mv.seat)) {
+      lastMoved.addAll(events.where((e) => !e.captured).map((e) => e.marble));
+    }
     if (mv.kind == MoveKind.discard) {
       await Future.delayed(const Duration(milliseconds: 500));
     }
@@ -503,14 +511,16 @@ class GameController extends GetxController {
     _beginTurn();
   }
 
-  Future<void> _animate(Move mv, List<MoveEvent> events) async {
+  Future<void> _animate(Move mv, List<MoveEvent> events, double slow) async {
+    final hop = GameConfig.marbleHop * slow;
+    final step = GameConfig.marbleStep * slow;
     if (mv.kind == MoveKind.swap) {
       audio?.play(Sfx.swap);
       for (final e in events) {
         displayPos[e.marble] = e.to;
       }
       tick.value++;
-      await Future.delayed(GameConfig.marbleHop);
+      await Future.delayed(hop);
       return;
     }
     for (final e in events) {
@@ -519,7 +529,7 @@ class GameController extends GetxController {
         displayPos[e.marble] = Pos.base;
         audio?.play(Sfx.capture);
         tick.value++;
-        await Future.delayed(GameConfig.marbleHop);
+        await Future.delayed(hop);
         continue;
       }
       if (e.path.isNotEmpty) {
@@ -528,14 +538,14 @@ class GameController extends GetxController {
           displayPos[e.marble] = Pos.rel(owner, cell);
           audio?.play(Sfx.move);
           tick.value++;
-          await Future.delayed(GameConfig.marbleStep);
+          await Future.delayed(step);
         }
       }
       displayPos[e.marble] = e.to;
       if (Pos.isHome(e.to)) audio?.play(Sfx.home);
       if (Pos.isBase(e.from)) audio?.play(Sfx.move);
       tick.value++;
-      await Future.delayed(GameConfig.marbleHop);
+      await Future.delayed(hop);
     }
   }
 

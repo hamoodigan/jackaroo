@@ -188,4 +188,63 @@ void main() {
     expect(host.state.marbles[1][0], Pos.base);
     expect(host.state.turn, 1);
   });
+
+  test('rejoin: a fresh client resumes from the retained snapshot', () async {
+    final broker = FakeBroker();
+    final net = FakeRoomService(broker);
+    const base = 'jackaroo-hg/v1/REJN';
+    final host = GameController(
+      players: slots(),
+      rules: const RuleSet(),
+      hideHands: false,
+      online: OnlineSession(net: net, base: base, mySeat: 0, isHost: true),
+    )..onInit();
+    await pump();
+    // Host plays a couple of moves (forced discards to keep it deterministic).
+    host.state.hands[0] = [1]; // 2 with nothing out → discard
+    host.state.turn = 0;
+    host.refreshTurn();
+    host.tapCard(1);
+    await host.settle();
+    await pump(700);
+    final snap = broker.retained['$base/state']!;
+    expect(snap['seq'], 1);
+
+    // The guest's page reloads: a brand-new controller boots from the
+    // retained snapshot with its seq, exactly what OnlineController.rejoin does.
+    final rejoined = GameController(
+      players: slots(),
+      rules: const RuleSet(),
+      hideHands: false,
+      online: OnlineSession(
+        net: net,
+        base: base,
+        mySeat: 1,
+        isHost: false,
+        initialState: Map<String, dynamic>.from(snap['state']),
+        initialSeq: snap['seq'],
+      ),
+    )..onInit();
+    await pump();
+    expect(rejoined.state.turn, host.state.turn);
+    expect(rejoined.state.hands, host.state.hands);
+
+    // Guest acts on its turn (it is seat 1's turn now) and the host accepts.
+    for (final c in [host, rejoined]) {
+      c.state.hands[1] = [1];
+      c.state.marbles[1][0] = 0;
+      c.state.turn = 1;
+      c.refreshTurn();
+    }
+    rejoined.tapCard(1);
+    rejoined.tapMarble(const MarbleRef(1, 0));
+    await pump();
+    await host.settle();
+    await pump();
+    await rejoined.settle();
+    await pump();
+    expect(host.state.marbles[1][0], 2);
+    expect(rejoined.state.marbles[1][0], 2);
+    expect(broker.retained['$base/state']!['seq'], 2);
+  });
 }

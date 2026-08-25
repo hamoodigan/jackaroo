@@ -90,17 +90,17 @@ class BoardPainter extends CustomPainter {
     if (ring != null) {
       canvas.drawCircle(
           c,
-          r * 1.5,
+          r * 1.9,
           Paint()
-            ..color = ring.withValues(alpha: 0.22)
-            ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.7));
+            ..color = ring.withValues(alpha: 0.35)
+            ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.9));
       canvas.drawCircle(
           c,
-          r * 1.12,
+          r * 1.25,
           Paint()
             ..style = PaintingStyle.stroke
-            ..strokeWidth = r * 0.18
-            ..color = ring.withValues(alpha: 0.85));
+            ..strokeWidth = r * 0.22
+            ..color = ring);
     }
   }
 
@@ -111,7 +111,8 @@ class BoardPainter extends CustomPainter {
       for (var seat = 0; seat < GameConfig.seats; seat++) {
         if (Pos.entryCell(seat) == i) ring = AppTheme.seat(seat);
       }
-      _hole(canvas, g.trackCell(i), r, ring: ring);
+      _hole(canvas, g.trackCell(i), r,
+          ring: ring, fill: ring == null ? null : Color.lerp(cream, ring, 0.55));
     }
   }
 

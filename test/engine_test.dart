@@ -9,7 +9,7 @@ import 'package:jackaroo/domain/entities/position.dart';
 import 'package:jackaroo/domain/entities/rules.dart';
 
 // Card ids: rank = id % 13 + 1 (spades suit for id < 13).
-const ace = 0, two = 1, four = 3, five = 4, seven = 6, ten = 9, jack = 10, queen = 11, king = 12;
+const ace = 0, two = 1, four = 3, five = 4, six = 5, seven = 6, ten = 9, jack = 10, queen = 11, king = 12;
 
 GameState fresh({RuleSet rules = const RuleSet()}) => GameState.fresh(
       List.generate(4, (i) => PlayerSlot(seat: i, name: 'P$i')),
@@ -97,10 +97,10 @@ void main() {
     e.apply(back);
     expect(s.marbles[0][0], GameConfig.trackLength - 4);
     s.turn = 0;
-    s.hands[0] = [seven];
+    s.hands[0] = [six];
     final mv = e
-        .movesForCard(0, seven)
-        .firstWhere((m) => m.kind == MoveKind.advance);
+        .movesForCard(0, six)
+        .firstWhere((m) => Pos.isHome(m.to));
     expect(mv.to, Pos.home(3));
     e.apply(mv);
     expect(Pos.isHome(s.marbles[0][0]), isTrue);
@@ -109,15 +109,15 @@ void main() {
   test('home lane: exact fit, no passing own marbles', () {
     final s = fresh();
     s.marbles[0][0] = Pos.home(2);
-    s.marbles[0][1] = GameConfig.trackLength - 2; // 2 from threshold
+    s.marbles[0][1] = GameConfig.homeBranch; // on the branch hole
     s.hands[0] = [five, two];
     final e = engineWith(s);
-    // 5 → would be home index 3 but must pass home 2 → illegal.
-    expect(e.movesForCard(0, five), isEmpty);
-    // 2 → home index 0, fine.
+    // 5 → home index 4 does not exist; only the trip around the loop remains.
+    final f = e.movesForCard(0, five);
+    expect(f.single.to, 3);
+    // 2 → home index 1, or continue past the base to hole 0 (own base).
     final m = e.movesForCard(0, two);
-    expect(m.length, 1);
-    expect(m.single.to, Pos.home(0));
+    expect(m.map((x) => x.to).toSet(), {Pos.home(1), 0});
   });
 
   test('jack: board rule swaps any two marbles, app rule needs own', () {
@@ -226,7 +226,7 @@ void main() {
     for (var i = 1; i < 4; i++) {
       s.marbles[2][i] = Pos.home(i);
     }
-    s.marbles[2][0] = GameConfig.trackLength - 1;
+    s.marbles[2][0] = GameConfig.homeBranch;
     s.hands[0] = [ace];
     final e = engineWith(s);
     final mv = e.movesForCard(0, ace).firstWhere((m) => m.to == Pos.home(0));
@@ -331,5 +331,22 @@ void main() {
     e.apply(e.movesForCard(0, ten).singleWhere((m) => m.kind == MoveKind.forceDiscard));
     // seat 1 burned its only card and is skipped, seat 2 has none → seat 3
     expect(s.turn, 3);
+  });
+
+  test('at the branch hole you may enter home OR stay on the track', () {
+    final s = fresh();
+    s.marbles[0][0] = GameConfig.homeBranch;
+    s.hands[0] = [ace];
+    final moves = engineWith(s).movesForCard(0, ace);
+    expect(moves.any((m) => m.to == Pos.home(0)), isTrue);
+    expect(moves.any((m) => m.to == GameConfig.trackLength - 1), isTrue);
+  });
+
+  test('past the branch hole a marble goes around again', () {
+    final s = fresh();
+    s.marbles[0][0] = GameConfig.trackLength - 1;
+    s.hands[0] = [two];
+    final moves = engineWith(s).movesForCard(0, two);
+    expect(moves.single.to, 1); // 75 → base (0) → 1, no lane on the way
   });
 }

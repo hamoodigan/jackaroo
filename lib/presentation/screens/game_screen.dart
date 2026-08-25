@@ -6,6 +6,7 @@ import 'package:get/get.dart';
 import '../../core/config/game_config.dart';
 import '../../core/theme/app_theme.dart';
 import '../controllers/game_controller.dart';
+import '../controllers/online_controller.dart';
 import '../widgets/board_view.dart';
 import '../widgets/confetti_overlay.dart';
 import '../widgets/hand_view.dart';
@@ -155,6 +156,7 @@ class GameScreen extends StatelessWidget {
               }),
             _dialogButton('quit'.tr, Icons.logout_rounded, () {
               Get.back();
+              if (c.isOnline) Get.find<OnlineController>().leave(silent: true);
               Get.offAllNamed('/');
               Get.delete<GameController>(force: true);
             }),
@@ -291,6 +293,7 @@ class _GameOver extends StatelessWidget {
                               padding: const EdgeInsets.symmetric(vertical: 14),
                             ),
                             onPressed: () {
+                              if (c.isOnline) Get.find<OnlineController>().leave(silent: true);
                               Get.offAllNamed('/');
                               Get.delete<GameController>(force: true);
                             },
