@@ -72,6 +72,12 @@ class GameController extends GetxController {
   final targets = <Target>[].obs;
   final lastPlayed = RxnInt();
   final message = ''.obs;
+
+  /// Transient banner (card powers), cleared automatically.
+  final notice = ''.obs;
+
+  /// The 10 / Queen power available for the selected card, if any.
+  final specialMove = Rxn<Move>();
   final winnerTeam = RxnInt();
 
   /// Where each marble is drawn (lags the engine during animations).
@@ -204,6 +210,7 @@ class GameController extends GetxController {
   }
 
   void _resetSelection() {
+    specialMove.value = null;
     selectedCard.value = null;
     selectedMarble.value = null;
     highlightMarbles.clear();
@@ -237,9 +244,35 @@ class GameController extends GetxController {
     audio?.play(Sfx.card);
     _resetSelection();
     selectedCard.value = cardId;
-    highlightMarbles.assignAll(forCard.map((m) => m.marble!));
+    highlightMarbles.assignAll(
+        forCard.where((m) => m.marble != null).map((m) => m.marble!));
+    specialMove.value = forCard.firstWhereOrNull(
+        (m) => m.kind == MoveKind.forceDiscard || m.kind == MoveKind.steal);
     phase.value = Phase.pickMarble;
-    message.value = 'pick_marble'.tr;
+    message.value = specialMove.value == null
+        ? 'pick_marble'.tr
+        : (highlightMarbles.isEmpty ? 'pick_power'.tr : 'pick_action'.tr);
+  }
+
+  /// Plays the selected card's power (10 → force discard, Q → steal).
+  void playSpecial() {
+    final m = specialMove.value;
+    if (m == null || !selecting) return;
+    _apply(m);
+  }
+
+  Timer? _noticeTimer;
+
+  void _showEffect(CardEffect e) {
+    final who = players[e.seat].name, victim = players[e.victim].name;
+    notice.value = e.kind == MoveKind.steal
+        ? 'effect_steal'.trParams({'name': who, 'victim': victim})
+        : 'effect_discard'.trParams({'name': who, 'victim': victim});
+    audio?.play(Sfx.swap);
+    _noticeTimer?.cancel();
+    _noticeTimer = Timer(const Duration(milliseconds: 3200), () {
+      if (!_disposed) notice.value = '';
+    });
   }
 
   List<Move> get _cardMoves =>
@@ -439,6 +472,8 @@ class GameController extends GetxController {
     lastPlayed.value = mv.cardId;
     if (mv.kind != MoveKind.discard) audio?.play(Sfx.card);
     final events = engine.apply(mv);
+    final effect = engine.lastEffect;
+    if (effect != null) _showEffect(effect);
     tick.value++;
     await _animate(mv, events);
     if (_disposed) return;

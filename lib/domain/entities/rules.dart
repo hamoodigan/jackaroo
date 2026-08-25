@@ -17,12 +17,22 @@ class RuleSet {
   /// A 7 may be split between two marbles.
   final bool sevenSplit;
 
+  /// A 10 may instead make the next player throw away a random card and
+  /// lose their turn.
+  final bool tenSkip;
+
+  /// A Queen may instead steal a random card from the next player (into
+  /// your hand) and skip their turn.
+  final bool queenSteal;
+
   const RuleSet({
     this.jackSwapAny = true,
     this.fiveMovesAny = true,
     this.kingBurnsPath = true,
     this.canBurnPartner = true,
     this.sevenSplit = true,
+    this.tenSkip = true,
+    this.queenSteal = true,
   });
 
   RuleSet copyWith({
@@ -31,6 +41,8 @@ class RuleSet {
     bool? kingBurnsPath,
     bool? canBurnPartner,
     bool? sevenSplit,
+    bool? tenSkip,
+    bool? queenSteal,
   }) =>
       RuleSet(
         jackSwapAny: jackSwapAny ?? this.jackSwapAny,
@@ -38,6 +50,8 @@ class RuleSet {
         kingBurnsPath: kingBurnsPath ?? this.kingBurnsPath,
         canBurnPartner: canBurnPartner ?? this.canBurnPartner,
         sevenSplit: sevenSplit ?? this.sevenSplit,
+        tenSkip: tenSkip ?? this.tenSkip,
+        queenSteal: queenSteal ?? this.queenSteal,
       );
 
   Map<String, dynamic> toJson() => {
@@ -46,6 +60,8 @@ class RuleSet {
         'kingBurnsPath': kingBurnsPath,
         'canBurnPartner': canBurnPartner,
         'sevenSplit': sevenSplit,
+        'tenSkip': tenSkip,
+        'queenSteal': queenSteal,
       };
 
   factory RuleSet.fromJson(Map<String, dynamic> j) => RuleSet(
@@ -54,5 +70,7 @@ class RuleSet {
         kingBurnsPath: j['kingBurnsPath'] ?? true,
         canBurnPartner: j['canBurnPartner'] ?? true,
         sevenSplit: j['sevenSplit'] ?? true,
+        tenSkip: j['tenSkip'] ?? true,
+        queenSteal: j['queenSteal'] ?? true,
       );
 }

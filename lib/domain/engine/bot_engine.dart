@@ -45,6 +45,11 @@ class BotEngine {
 
   double score(int seat, Move m, BotLevel level) {
     final team = seat % 2;
+    if (m.kind == MoveKind.forceDiscard) {
+      // Costs the victim a card and a turn; better when they hold few cards.
+      return 9.0 + (4 - s.hands[(seat + 1) % 4].length) * 2;
+    }
+    if (m.kind == MoveKind.steal) return 12.0;
     if (m.kind == MoveKind.discard) {
       // Keep the flexible cards; burn plain numbers first.
       const keep = {1: 8, 13: 8, 11: 5, 7: 4, 5: 3, 4: 3};

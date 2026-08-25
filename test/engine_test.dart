@@ -9,7 +9,7 @@ import 'package:jackaroo/domain/entities/position.dart';
 import 'package:jackaroo/domain/entities/rules.dart';
 
 // Card ids: rank = id % 13 + 1 (spades suit for id < 13).
-const ace = 0, two = 1, four = 3, five = 4, seven = 6, jack = 10, king = 12;
+const ace = 0, two = 1, four = 3, five = 4, seven = 6, ten = 9, jack = 10, queen = 11, king = 12;
 
 GameState fresh({RuleSet rules = const RuleSet()}) => GameState.fresh(
       List.generate(4, (i) => PlayerSlot(seat: i, name: 'P$i')),
@@ -271,5 +271,65 @@ void main() {
       e.apply(bot.choose(s.turn, BotLevel.hard));
     }
     expect(s.isOver, isTrue, reason: 'game should finish within 5000 moves');
+  });
+
+  test('10: next player loses a random card and their turn', () {
+    final s = fresh();
+    s.hands[0] = [ten];
+    s.hands[1] = [two, four, five];
+    s.hands[2] = [two];
+    s.hands[3] = [two];
+    s.marbles[0][0] = 3;
+    final e = engineWith(s);
+    final moves = e.movesForCard(0, ten);
+    expect(moves.any((m) => m.kind == MoveKind.advance), isTrue);
+    final power = moves.singleWhere((m) => m.kind == MoveKind.forceDiscard);
+    e.apply(power);
+    expect(s.hands[1].length, 2);
+    expect(s.discard.length, 2); // the 10 + the burned card
+    expect(s.turn, 2); // seat 1 skipped
+    expect(e.lastEffect!.victim, 1);
+  });
+
+  test('Queen: steals a random card and skips the next player', () {
+    final s = fresh();
+    s.hands[0] = [queen];
+    s.hands[1] = [two, four];
+    s.hands[2] = [five];
+    s.hands[3] = [five];
+    final e = engineWith(s);
+    final power = e.movesForCard(0, queen).singleWhere((m) => m.kind == MoveKind.steal);
+    e.apply(power);
+    expect(s.hands[0].length, 1);
+    expect(s.hands[1].length, 1);
+    expect([two, four].contains(s.hands[0].single), isTrue);
+    expect(s.turn, 2);
+  });
+
+  test('powers are unavailable when the next hand is empty or rule off', () {
+    final s = fresh();
+    s.hands[0] = [ten, queen];
+    s.hands[1] = [];
+    final e = engineWith(s);
+    expect(e.movesForCard(0, ten).where((m) => m.kind == MoveKind.forceDiscard), isEmpty);
+    expect(e.movesForCard(0, queen).where((m) => m.kind == MoveKind.steal), isEmpty);
+    final s2 = fresh(rules: const RuleSet(tenSkip: false, queenSteal: false));
+    s2.hands[0] = [ten, queen];
+    s2.hands[1] = [two];
+    final e2 = engineWith(s2);
+    expect(e2.movesForCard(0, ten).where((m) => m.kind == MoveKind.forceDiscard), isEmpty);
+    expect(e2.movesForCard(0, queen).where((m) => m.kind == MoveKind.steal), isEmpty);
+  });
+
+  test('a player left without cards is passed over', () {
+    final s = fresh();
+    s.hands[0] = [ten];
+    s.hands[1] = [two];
+    s.hands[2] = [];
+    s.hands[3] = [two];
+    final e = engineWith(s);
+    e.apply(e.movesForCard(0, ten).singleWhere((m) => m.kind == MoveKind.forceDiscard));
+    // seat 1 burned its only card and is skipped, seat 2 has none → seat 3
+    expect(s.turn, 3);
   });
 }

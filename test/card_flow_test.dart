@@ -206,4 +206,32 @@ void main() {
     expect(c.phase.value, Phase.pickCard);
     expect(c.highlightMarbles, isEmpty);
   });
+
+  test('10 and Queen: power button appears next to marble moves', () async {
+    final c = make();
+    arrange(c, [card(10)], marbles: {(0, 0): 0});
+    c.state.hands[1] = [card(2), card(3)];
+    c.refreshTurn();
+    c.tapCard(card(10));
+    expect(c.highlightMarbles, {const MarbleRef(0, 0)});
+    expect(c.specialMove.value?.kind, MoveKind.forceDiscard);
+    c.playSpecial();
+    await settle(c);
+    expect(c.state.hands[1].length, 1);
+    expect(c.state.turn, 2);
+    expect(c.notice.value, isNotEmpty);
+
+    final q = make();
+    arrange(q, [card(12)]);
+    q.state.hands[1] = [card(5)];
+    q.refreshTurn();
+    q.tapCard(card(12));
+    expect(q.highlightMarbles, isEmpty);
+    expect(q.specialMove.value?.kind, MoveKind.steal);
+    q.playSpecial();
+    await settle(q);
+    expect(q.state.hands[0], [card(5)]);
+    expect(q.state.hands[1], isEmpty);
+    expect(q.state.turn, 2);
+  });
 }

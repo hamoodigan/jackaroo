@@ -34,6 +34,14 @@ only; the numbers above are all you need.
 Earlier attempts the user rejected: square ring (CCW), then a plus/cross with
 arms. If the user says "the shape is wrong" again, ask for a photo first.
 
+## 10 / Queen powers (added 2026-08-25, user's house rules)
+10 = move 10 OR make the next player throw away a RANDOM card and lose their
+turn. Queen = move 12 OR steal a RANDOM card from the next player into your
+hand and skip their turn. `RuleSet.tenSkip` / `queenSteal` toggles (default on).
+Engine: `MoveKind.forceDiscard` / `steal`, pick made with `engine.rng` inside
+`apply` (host snapshot keeps clients consistent), `_advanceTurn` passes over
+players left with no cards. UI: gold power button under the status line.
+
 ## Online protocol (lib/data/net + game_controller online mode)
 - Broker: `broker.hivemq.com` (tcp 1883 on Android/iOS, wss 8884 `/mqtt` on web).
   `NetConfig` holds host/ports/topic root `jackaroo-hg/v1/<CODE>`.

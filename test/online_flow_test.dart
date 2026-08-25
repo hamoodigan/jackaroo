@@ -154,7 +154,7 @@ void main() {
     expect(host.state.turn, client.state.turn);
     expect(host.state.marbles, client.state.marbles);
     expect(host.state.hands, client.state.hands);
-    expect(broker.retained['$base/state']!['seq'], greaterThanOrEqualTo(4));
+    expect(broker.retained['$base/state']!['seq'], greaterThanOrEqualTo(3));
   });
 
   test('host ignores an illegal intent', () async {

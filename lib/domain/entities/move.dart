@@ -1,6 +1,19 @@
 /// One playable action. Built by the engine (never by the UI) so every
 /// move handed to `apply` is already legal.
-enum MoveKind { exitBase, advance, back, swap, split, discard }
+enum MoveKind {
+  exitBase,
+  advance,
+  back,
+  swap,
+  split,
+  discard,
+
+  /// 10: the next player throws away a random card and loses their turn.
+  forceDiscard,
+
+  /// Queen: steal a random card from the next player and skip their turn.
+  steal,
+}
 
 class MarbleRef {
   final int seat;

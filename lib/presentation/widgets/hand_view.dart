@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../domain/entities/move.dart';
 import '../controllers/game_controller.dart';
 import 'card_widget.dart';
 
@@ -26,6 +27,9 @@ class HandView extends StatelessWidget {
       final discard = myTurn && c.mustDiscard;
       final sel = c.selectedCard.value;
       final color = AppTheme.seat(c.turn);
+      final special = c.specialMove.value;
+      final notice = c.notice.value;
+      final victim = c.players[(c.turn + 1) % c.players.length].name;
 
       return Column(
         mainAxisSize: MainAxisSize.min,
@@ -63,6 +67,42 @@ class HandView extends StatelessWidget {
               ],
             ),
           ),
+          if (notice.isNotEmpty)
+            Padding(
+              padding: EdgeInsets.only(top: cardWidth * 0.12),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppTheme.gold.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppTheme.gold.withValues(alpha: 0.5)),
+                ),
+                child: Text(notice,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        color: AppTheme.gold, fontWeight: FontWeight.w700, fontSize: 13)),
+              ),
+            ),
+          if (special != null && myTurn && !hidden)
+            Padding(
+              padding: EdgeInsets.only(top: cardWidth * 0.18),
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppTheme.gold,
+                  foregroundColor: AppTheme.bgBottom,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                ),
+                onPressed: c.playSpecial,
+                icon: Icon(special.kind == MoveKind.steal
+                    ? Icons.back_hand_rounded
+                    : Icons.block_rounded),
+                label: Text(
+                  (special.kind == MoveKind.steal ? 'queen_action' : 'ten_action')
+                      .trParams({'name': victim}),
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ),
           SizedBox(height: cardWidth * 0.3),
           SizedBox(
             height: cardWidth * 1.42 + cardWidth * 0.4,

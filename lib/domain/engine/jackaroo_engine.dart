@@ -15,6 +15,11 @@ class JackarooEngine {
 
   JackarooEngine(this.state, {int? seed}) : rng = Random(seed);
 
+  /// Side effect of the last applied move (10 / Queen powers), for the UI.
+  CardEffect? lastEffect;
+
+  int nextSeat(int seat) => (seat + 1) % GameConfig.seats;
+
   static const _track = GameConfig.trackLength;
   static const _homeSize = GameConfig.homeSize;
 
@@ -114,6 +119,20 @@ class JackarooEngine {
           add(_advance(seat, cardId, r, 7, m));
         }
         if (state.rules.sevenSplit) out.addAll(_splits(seat, cardId, own));
+      case 10:
+        for (final r in own) {
+          add(_advance(seat, cardId, r, 10, m));
+        }
+        if (state.rules.tenSkip && state.hands[nextSeat(seat)].isNotEmpty) {
+          out.add(Move(seat: seat, cardId: cardId, kind: MoveKind.forceDiscard));
+        }
+      case 12:
+        for (final r in own) {
+          add(_advance(seat, cardId, r, 12, m));
+        }
+        if (state.rules.queenSteal && state.hands[nextSeat(seat)].isNotEmpty) {
+          out.add(Move(seat: seat, cardId: cardId, kind: MoveKind.steal));
+        }
       default:
         final n = rank == 12 ? 12 : rank;
         for (final r in own) {
@@ -330,8 +349,27 @@ class JackarooEngine {
   List<MoveEvent> apply(Move move) {
     final events = <MoveEvent>[];
     final s = move.seat;
+    lastEffect = null;
     state.hands[s].remove(move.cardId);
     state.discard.add(move.cardId);
+
+    if (move.kind == MoveKind.forceDiscard || move.kind == MoveKind.steal) {
+      final victim = nextSeat(s);
+      final hand = state.hands[victim];
+      int? taken;
+      if (hand.isNotEmpty) {
+        taken = hand.removeAt(rng.nextInt(hand.length));
+        if (move.kind == MoveKind.steal) {
+          state.hands[s].add(taken);
+        } else {
+          state.discard.add(taken);
+        }
+      }
+      lastEffect = CardEffect(move.kind, s, victim, taken);
+      state.movesPlayed[s]++;
+      _advanceTurn(s, 2); // victim loses the turn
+      return events;
+    }
 
     if (move.kind != MoveKind.discard) {
       final captures = <MarbleRef>[];
@@ -342,11 +380,22 @@ class JackarooEngine {
       if (state.teamFinished(team)) state.winnerTeam = team;
     }
 
-    if (!state.isOver) {
-      state.turn = (state.turn + 1) % GameConfig.seats;
-      if (handsEmpty) deal();
-    }
+    if (!state.isOver) _advanceTurn(s, 1);
     return events;
+  }
+
+  /// Moves the turn [step] seats on, deals when every hand is empty, and
+  /// passes over players who are out of cards (possible after a skip).
+  void _advanceTurn(int from, int step) {
+    state.turn = (from + step) % GameConfig.seats;
+    if (handsEmpty) {
+      deal();
+      return;
+    }
+    var guard = 0;
+    while (state.hands[state.turn].isEmpty && guard++ < GameConfig.seats) {
+      state.turn = nextSeat(state.turn);
+    }
   }
 
   /// Moves marbles inside [m] (either the real state or a simulation).
@@ -424,7 +473,18 @@ class JackarooEngine {
         final fb = m[b.seat][b.idx];
         place(b, move.to2, path: pathFor(b, fb, move.to2, true));
       case MoveKind.discard:
+      case MoveKind.forceDiscard:
+      case MoveKind.steal:
         break;
     }
   }
+}
+
+/// What a 10 / Queen power did: who played it, who suffered, which card.
+class CardEffect {
+  final MoveKind kind;
+  final int seat;
+  final int victim;
+  final int? card;
+  const CardEffect(this.kind, this.seat, this.victim, this.card);
 }
