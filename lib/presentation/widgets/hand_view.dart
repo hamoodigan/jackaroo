@@ -18,10 +18,12 @@ class HandView extends StatelessWidget {
       c.tick.value;
       final phase = c.phase.value;
       final hidden = phase == Phase.cover || phase == Phase.over;
-      final showFace = !hidden && !c.current.isBot;
-      final hand = c.handOf(c.turn);
-      final playable = c.playableCards;
-      final discard = c.mustDiscard;
+      final seat = c.viewSeat;
+      final myTurn = c.turn == seat && c.isLocalSeat(seat);
+      final showFace = !hidden && (c.isOnline || !c.current.isBot);
+      final hand = c.handOf(seat);
+      final playable = myTurn ? c.playableCards : const <int>{};
+      final discard = myTurn && c.mustDiscard;
       final sel = c.selectedCard.value;
       final color = AppTheme.seat(c.turn);
 
@@ -77,7 +79,7 @@ class HandView extends StatelessWidget {
                       faceDown: !showFace,
                       playable: showFace && (discard || playable.contains(id)),
                       selected: sel == id,
-                      onTap: showFace ? () => c.tapCard(id) : null,
+                      onTap: showFace && myTurn ? () => c.tapCard(id) : null,
                     ),
                   ),
               ],

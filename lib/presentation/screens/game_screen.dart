@@ -65,6 +65,11 @@ class GameScreen extends StatelessWidget {
                 style: AppTheme.title(16, color: AppTheme.gold.withValues(alpha: 0.85))),
           ),
           IconButton(
+            tooltip: 'cards_guide'.tr,
+            onPressed: () => Get.toNamed('/cards'),
+            icon: const Icon(Icons.help_outline_rounded, color: AppTheme.gold),
+          ),
+          IconButton(
             onPressed: () => SettingsSheet.show(context),
             icon: const Icon(Icons.tune_rounded, color: AppTheme.gold),
           ),
@@ -139,10 +144,15 @@ class GameScreen extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             _dialogButton('resume'.tr, Icons.play_arrow_rounded, () => Get.back()),
-            _dialogButton('restart'.tr, Icons.refresh_rounded, () {
+            _dialogButton('cards_guide'.tr, Icons.style_rounded, () {
               Get.back();
-              c.newGame();
+              Get.toNamed('/cards');
             }),
+            if (!c.isOnline)
+              _dialogButton('restart'.tr, Icons.refresh_rounded, () {
+                Get.back();
+                c.newGame();
+              }),
             _dialogButton('quit'.tr, Icons.logout_rounded, () {
               Get.back();
               Get.offAllNamed('/');
@@ -287,19 +297,21 @@ class _GameOver extends StatelessWidget {
                             child: Text('main_menu'.tr),
                           ),
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: FilledButton(
-                            style: FilledButton.styleFrom(
-                              backgroundColor: AppTheme.gold,
-                              foregroundColor: AppTheme.bgBottom,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
+                        if (!c.isOnline) ...[
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: FilledButton(
+                              style: FilledButton.styleFrom(
+                                backgroundColor: AppTheme.gold,
+                                foregroundColor: AppTheme.bgBottom,
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                              ),
+                              onPressed: c.newGame,
+                              child: Text('play_again'.tr,
+                                  style: const TextStyle(fontWeight: FontWeight.w800)),
                             ),
-                            onPressed: c.newGame,
-                            child: Text('play_again'.tr,
-                                style: const TextStyle(fontWeight: FontWeight.w800)),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   ],

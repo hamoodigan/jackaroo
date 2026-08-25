@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:get/get.dart';
 
 import '../../core/config/game_config.dart';
 import '../../data/audio_service.dart';
+import '../../data/net/online_session.dart';
 import '../../domain/engine/bot_engine.dart';
 import '../../domain/engine/jackaroo_engine.dart';
 import '../../domain/entities/card.dart';
@@ -46,6 +48,9 @@ class GameController extends GetxController {
   final bool hideHands;
   final AudioService? audio;
 
+  /// Non-null when this match is played over the network.
+  final OnlineSession? online;
+
   late GameState state;
   late JackarooEngine engine;
   late BotEngine bot;
@@ -55,6 +60,7 @@ class GameController extends GetxController {
     required this.rules,
     required this.hideHands,
     this.audio,
+    this.online,
   });
 
   // ── reactive UI state ─────────────────────────────────────────────────
@@ -78,6 +84,17 @@ class GameController extends GetxController {
 
   int get turn => state.turn;
   PlayerSlot get current => players[turn];
+  bool get isOnline => online != null;
+  bool get isHost => online?.isHost ?? true;
+
+  /// Seat whose cards this device shows: mine online, the current one offline.
+  int get viewSeat => online?.mySeat ?? turn;
+
+  /// Whether taps from this device may act for [seat].
+  bool isLocalSeat(int seat) =>
+      online == null ? !players[seat].isBot : seat == online!.mySeat;
+
+  int _seq = 0;
   bool get mustDiscard =>
       _moves.isNotEmpty && _moves.every((m) => m.kind == MoveKind.discard);
   int get humanCount => players.where((p) => !p.isBot).length;
@@ -96,19 +113,40 @@ class GameController extends GetxController {
   void onInit() {
     super.onInit();
     newGame();
+    final o = online;
+    if (o != null) {
+      if (o.isHost) {
+        o.onIntents(_onIntent);
+      } else {
+        o.onMoves(_onRemoteMove);
+      }
+    }
   }
 
   @override
   void onClose() {
     _disposed = true;
+    online?.dispose();
     super.onClose();
   }
 
   void newGame() {
-    state = GameState.fresh(players, rules);
-    engine = JackarooEngine(state);
-    bot = BotEngine(engine);
-    engine.startGame();
+    final snap = online?.initialState;
+    if (snap != null && snap.isNotEmpty) {
+      state = GameState.fromJson(snap);
+      engine = JackarooEngine(state);
+      bot = BotEngine(engine);
+      _seq = online!.initialSeq;
+    } else {
+      state = GameState.fresh(players, rules);
+      engine = JackarooEngine(state);
+      bot = BotEngine(engine);
+      engine.startGame();
+      _seq = 0;
+      if (online?.isHost ?? false) {
+        online!.publishState({'seq': _seq, 'state': state.toJson()});
+      }
+    }
     for (var s = 0; s < GameConfig.seats; s++) {
       for (var i = 0; i < GameConfig.marblesPerPlayer; i++) {
         displayPos[MarbleRef(s, i)] = Pos.base;
@@ -136,8 +174,11 @@ class GameController extends GetxController {
     if (current.isBot) {
       phase.value = Phase.botTurn;
       message.value = 'bot_thinking'.trParams({'name': current.name});
-      Future.delayed(GameConfig.botThink, _botPlay);
-    } else if (hideHands && humanCount > 1) {
+      if (isHost) Future.delayed(GameConfig.botThink, _botPlay);
+    } else if (!isLocalSeat(turn)) {
+      phase.value = Phase.botTurn; // remote human: just wait
+      message.value = 'waiting_for'.trParams({'name': current.name});
+    } else if (hideHands && !isOnline && humanCount > 1) {
       phase.value = Phase.cover;
       message.value = '';
     } else {
@@ -318,7 +359,80 @@ class GameController extends GetxController {
 
   // ── applying + animation ──────────────────────────────────────────────
 
-  Future<void> _apply(Move mv) async {
+  Future<void> _busy = Future.value();
+
+  /// Completes when the current move (animation included) has finished.
+  /// Used by tests and by the online layer.
+  Future<void> settle() => _busy;
+
+  /// Recomputes the current turn from [state] (after an external change).
+  void refreshTurn() {
+    for (var s = 0; s < GameConfig.seats; s++) {
+      for (var i = 0; i < GameConfig.marblesPerPlayer; i++) {
+        displayPos[MarbleRef(s, i)] = state.marbles[s][i];
+      }
+    }
+    _beginTurn();
+  }
+
+  void _apply(Move mv) {
+    final o = online;
+    if (o != null && !o.isHost) {
+      // Client: ask the host; the move comes back on the moves topic.
+      phase.value = Phase.animating;
+      highlightMarbles.clear();
+      targets.clear();
+      o.sendIntent({'seq': _seq, 'move': mv.toJson()});
+      return;
+    }
+    _busy = _run(mv);
+  }
+
+  /// Host: a remote player wants to play [json['move']] — validate and apply.
+  void _onIntent(Map<String, dynamic> json) {
+    if (_disposed || state.isOver) return;
+    if (json['seq'] != _seq) return; // stale
+    if (phase.value == Phase.animating) return;
+    if (isLocalSeat(turn) || current.isBot) return; // not their turn
+    final wanted = jsonEncode(json['move']);
+    for (final m in engine.legalMoves(turn)) {
+      if (jsonEncode(m.toJson()) == wanted) {
+        _busy = _run(m);
+        return;
+      }
+    }
+  }
+
+  /// Client: the host applied a move — replay it, then sync to its snapshot.
+  void _onRemoteMove(Map<String, dynamic> json) {
+    if (_disposed) return;
+    final seq = json['seq'] as int? ?? 0;
+    final snapshot = Map<String, dynamic>.from(json['state'] ?? {});
+    if (seq <= _seq) return; // duplicate
+    if (seq != _seq + 1 || _pendingRemote) {
+      _loadSnapshot(snapshot, seq);
+      return;
+    }
+    _seq = seq;
+    _pendingRemote = true;
+    _busy = _run(Move.fromJson(Map<String, dynamic>.from(json['move'])),
+        snapshot: snapshot);
+  }
+
+  bool _pendingRemote = false;
+
+  void _loadSnapshot(Map<String, dynamic> snapshot, int seq) {
+    if (snapshot.isEmpty) return;
+    _pendingRemote = false;
+    state = GameState.fromJson(snapshot);
+    engine = JackarooEngine(state);
+    bot = BotEngine(engine);
+    _seq = seq;
+    lastPlayed.value = state.discard.isEmpty ? null : state.discard.last;
+    refreshTurn();
+  }
+
+  Future<void> _run(Move mv, {Map<String, dynamic>? snapshot}) async {
     phase.value = Phase.animating;
     highlightMarbles.clear();
     targets.clear();
@@ -333,6 +447,23 @@ class GameController extends GetxController {
     }
     if (engine.state.round > 1 && state.hands.every((h) => h.length == 4)) {
       audio?.play(Sfx.deal);
+    }
+    final o = online;
+    if (o != null && o.isHost) {
+      _seq++;
+      final snap = state.toJson();
+      o.publishMove({'seq': _seq, 'move': mv.toJson(), 'state': snap});
+      o.publishState({'seq': _seq, 'state': snap});
+    }
+    if (snapshot != null && snapshot.isNotEmpty) {
+      // Client: adopt the host's exact state (covers reshuffles).
+      _pendingRemote = false;
+      state = GameState.fromJson(snapshot);
+      engine = JackarooEngine(state);
+      bot = BotEngine(engine);
+      for (final e in displayPos.keys.toList()) {
+        displayPos[e] = state.marbles[e.seat][e.idx];
+      }
     }
     _beginTurn();
   }

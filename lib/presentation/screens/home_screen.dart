@@ -44,6 +44,18 @@ class HomeScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 14),
                         _MenuButton(
+                          label: 'play_online'.tr,
+                          icon: Icons.wifi_rounded,
+                          onTap: () => Get.toNamed('/online'),
+                        ),
+                        const SizedBox(height: 14),
+                        _MenuButton(
+                          label: 'cards_guide'.tr,
+                          icon: Icons.style_rounded,
+                          onTap: () => Get.toNamed('/cards'),
+                        ),
+                        const SizedBox(height: 14),
+                        _MenuButton(
                           label: 'how_to_play'.tr,
                           icon: Icons.menu_book_rounded,
                           onTap: () => Get.toNamed('/rules'),

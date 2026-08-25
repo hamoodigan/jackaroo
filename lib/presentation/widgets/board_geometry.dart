@@ -92,10 +92,10 @@ class BoardGeometry {
 
   Offset homeCell(int seat, int i) => tip(seat) + inward[seat] * ((i + 1) * d);
 
-  /// 2×2 waiting pocket OUTSIDE the cross, in the corner just before the
+  /// 2×2 waiting pocket OUTSIDE the cross, in the corner just AFTER the
   /// seat's arm (clockwise). Only marbles heading home enter the middle.
   Offset baseCell(int seat, int i) {
-    final corner = _start(seat) - centre; // (±a, ±a)
+    final corner = _start((seat + 1) % 4) - centre; // (±a, ±a)
     final sx = corner.dx.sign, sy = corner.dy.sign;
     final c = centre + Offset(sx * (armHalf + 2.4 * d), sy * (armHalf + 2.4 * d));
     final dx = (i % 2 == 0 ? -0.55 : 0.55) * d;
