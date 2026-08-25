@@ -227,13 +227,18 @@ class OnlineController extends GetxController {
     _launched = true;
     final settings = Get.find<SettingsController>();
     Get.delete<GameController>(force: true);
-    Get.put(GameController(
-      players: slots,
-      rules: rules.value,
-      hideHands: false,
-      audio: settings.audio,
-      online: session,
-    ));
+    // permanent: GetX would otherwise dispose the controller together with
+    // this lobby route when offNamed replaces it.
+    Get.put(
+      GameController(
+        players: slots,
+        rules: rules.value,
+        hideHands: false,
+        audio: settings.audio,
+        online: session,
+      ),
+      permanent: true,
+    );
     Get.offNamed('/game');
   }
 

@@ -81,12 +81,15 @@ class SetupScreen extends StatelessWidget {
     final players = c.finalPlayers();
     final settings = Get.find<SettingsController>();
     Get.delete<GameController>(force: true);
-    Get.put(GameController(
-      players: players,
-      rules: c.rules.value,
-      hideHands: settings.hideHands.value,
-      audio: settings.audio,
-    ));
+    Get.put(
+      GameController(
+        players: players,
+        rules: c.rules.value,
+        hideHands: settings.hideHands.value,
+        audio: settings.audio,
+      ),
+      permanent: true,
+    );
     Get.toNamed('/game');
   }
 

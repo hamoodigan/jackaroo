@@ -41,5 +41,10 @@ class OnlineSession {
   void dispose() {
     net.unsubscribe('$base/moves');
     net.unsubscribe('$base/intent');
+    if (isHost) {
+      // The room is over: drop the retained lobby/state from the broker.
+      net.clearRetained('$base/lobby');
+      net.clearRetained('$base/state');
+    }
   }
 }

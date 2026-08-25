@@ -28,7 +28,10 @@ class PlayerStrip extends StatelessWidget {
           children: [
             centre,
             const SizedBox(height: 8),
-            ...chips.map((w) => Padding(padding: const EdgeInsets.only(bottom: 6), child: w)),
+            ...chips.map(
+              (w) =>
+                  Padding(padding: const EdgeInsets.only(bottom: 6), child: w),
+            ),
           ],
         );
       }
@@ -65,8 +68,10 @@ class PlayerStrip extends StatelessWidget {
             ),
           ),
         const SizedBox(height: 3),
-        Text('round'.trParams({'n': '${c.state.round}'}),
-            style: const TextStyle(fontSize: 10, color: AppTheme.muted)),
+        Text(
+          'round'.trParams({'n': '${c.state.round}'}),
+          style: const TextStyle(fontSize: 10, color: AppTheme.muted),
+        ),
       ],
     );
   }
@@ -99,7 +104,11 @@ class PlayerStrip extends StatelessWidget {
               shape: BoxShape.circle,
               gradient: RadialGradient(
                 center: const Alignment(-0.4, -0.4),
-                colors: [Color.lerp(color, Colors.white, 0.5)!, color, AppTheme.seatDark[seat]],
+                colors: [
+                  Color.lerp(color, Colors.white, 0.5)!,
+                  color,
+                  AppTheme.seatDark[seat],
+                ],
               ),
             ),
           ),
@@ -119,24 +128,37 @@ class PlayerStrip extends StatelessWidget {
                     color: active ? Colors.white : AppTheme.ivory,
                   ),
                 ),
-                Row(
-                  children: [
-                    Icon(p.isBot ? Icons.smart_toy_rounded : Icons.person_rounded,
-                        size: 10, color: AppTheme.muted),
-                    const SizedBox(width: 3),
-                    Text(
-                      '$home/${GameConfig.marblesPerPlayer}',
-                      style: const TextStyle(fontSize: 10, color: AppTheme.muted),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      seat % 2 == 0 ? 'A' : 'B',
-                      style: TextStyle(
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Row(
+                    children: [
+                      Icon(
+                        p.isBot
+                            ? Icons.smart_toy_rounded
+                            : Icons.person_rounded,
+                        size: 10,
+                        color: AppTheme.muted,
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        '$home/${GameConfig.marblesPerPlayer}',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: AppTheme.muted,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        seat % 2 == 0 ? 'A' : 'B',
+                        style: TextStyle(
                           fontSize: 9,
                           fontWeight: FontWeight.w800,
-                          color: AppTheme.gold.withValues(alpha: 0.8)),
-                    ),
-                  ],
+                          color: AppTheme.gold.withValues(alpha: 0.8),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),

@@ -8,6 +8,7 @@ import '../../domain/entities/position.dart';
 import '../controllers/game_controller.dart';
 import 'board_geometry.dart';
 import 'board_painter.dart';
+import 'card_widget.dart';
 
 /// The playable board: static painter underneath, animated marbles and
 /// tappable target markers on top.
@@ -33,9 +34,31 @@ class BoardView extends StatelessWidget {
                 RepaintBoundary(
                   child: CustomPaint(
                     size: Size(size, size),
-                    painter: BoardPainter(g, 'app_name'.tr),
+                    painter: BoardPainter(g),
                   ),
                 ),
+                // Last played card rests in the centre octagon, like the deck
+                // on the real board.
+                Obx(() {
+                  final last = c.lastPlayed.value;
+                  final w = g.p * 2.6;
+                  return Positioned(
+                    left: g.centre.dx - w / 2,
+                    top: g.centre.dy - w * 1.42 / 2,
+                    child: IgnorePointer(
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 250),
+                        child: last == null
+                            ? SizedBox(width: w, height: w * 1.42)
+                            : CardWidget(
+                                key: ValueKey(last),
+                                card: c.card(last),
+                                width: w,
+                              ),
+                      ),
+                    ),
+                  );
+                }),
                 Obx(() {
                   c.tick.value; // subscribe
                   final phase = c.phase.value;

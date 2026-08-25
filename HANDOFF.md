@@ -1,74 +1,90 @@
-# Session Handoff — 2026-08-25 (Jackaroo v1.0)
+# Session Handoff — 2026-08-25 (Jackaroo v1.1: real board + online play)
 
 ## TL;DR
-Built a complete Flutter Jackaroo game from scratch in one session: pure rules
-engine (19 tests), bots, house-rule toggles, EN/AR, synthesized sounds, dark
-felt-and-gold UI, pass-and-play cover, PWA. Source on GitHub `hamoodigan/jackaroo`
-(`main`), web build on `gh-pages` → **https://hamoodigan.github.io/jackaroo/**.
-Cousins on iPhone/Android open that link → Safari/Chrome "Add to Home Screen".
+Complete Flutter Jackaroo built in one session and iterated live with the user.
+- Web (installable PWA, iPhone + Android): **https://hamoodigan.github.io/jackaroo/**
+- GitHub `hamoodigan/jackaroo` — source on `main`, web build on `gh-pages`.
+- Android APK: `build/app/outputs/flutter-apk/app-release.apk` (~51 MB).
+- Online multiplayer works out of the box over the free public HiveMQ MQTT
+  broker (no account, no server): Play online → Create room → share 4-letter
+  code → friends Join → host presses Start. Verified end-to-end in two browser
+  windows against the real broker (host move → guest, guest intent → host,
+  bots run on host, both boards identical).
+- Board = the real octagonal Jackaroo board, traced from a product photo.
+- 48 tests green: engine rules, every card through the real tap flow,
+  geometry, host/client protocol (in-memory broker), live broker round-trip.
 
-## Why this exists
-Cousins' Jackaroo app forces the Jack to swap one of *your own* marbles with an
-opponent's; on a physical board they swap ANY two marbles. `RuleSet.jackSwapAny`
-(default ON) = board rule; OFF = app rule. Other toggles: 5 moves any marble,
-King burns path, can burn partner, 7 split.
+## Board geometry (traced from the photo the user supplied)
+`lib/presentation/widgets/board_geometry.dart`, unit = hole pitch `p`.
+Octagon (apothem 11.9p). The track (76 holes) is a loop with 8 apexes:
+4 straight diagonal edges of 5 holes and 4 dented orthogonal sides
+(5 holes diagonally in, 6 straight at y = -5.33p, 5 diagonally out).
+Per seat (19 holes, relative index from the base hole, `entryOffset = 0`):
+base hole = 4th hole of the seat's diagonal edge (rel 0), apex (1), 4 in (2-5),
+6 straight (6-11), 4 out (12-15), apex (16), 2 along the next edge (17-18).
+Home lane: 4 holes from the threshold hole (rel -1) along the corner diagonal
+toward the centre. Waiting pocket: diamond of 4 holes in the notch of the
+next orthogonal side, centre (-2.4p, -7.9p) for the top-left template, pulled
+toward the seat's base hole. Seats: 0 bottom-right corner, 1 bottom-left,
+2 top-left, 3 top-right (template rotated 180/270/0/90 deg). Clockwise travel.
+Centre: cream octagon (3.3p) showing the last played card, like the deck on
+the real board. Hole photo + blob coordinates live in the session scratchpad
+only; the numbers above are all you need.
 
-## What went right
-- Engine designed state-first (`GameState.toJson()`), so online play can sync the
-  same document later. Engine returns `MoveEvent`s → UI animates from them.
-- Relative marble positions (`Pos`: -1 base, 0..75 track from own entry, 100+ home)
-  make the classic "4 back from entry, then enter home" trick fall out naturally.
-- Bot-vs-bot full-game test guarantees no dead-lock in dealing/turn flow.
-- Visual verification through windows-mcp screenshots caught nothing wrong in the
-  final build; a played Ace exit + 3 bot turns worked in Chrome.
+Earlier attempts the user rejected: square ring (CCW), then a plus/cross with
+arms. If the user says "the shape is wrong" again, ask for a photo first.
 
-## Board geometry (user-confirmed 2026-08-25)
-Classic CROSS-shaped board, marbles move CLOCKWISE. Each arm = 19 holes
-(7 up a side, 5 across the tip, 7 back), holes sit half a pitch past each
-corner so hole 9 = arm-tip centre = that seat's entry. Home column (4) runs
-from the tip toward the centre; the 2×2 WAITING pocket sits OUTSIDE the cross
-in the corner between arms (user: only home-bound marbles enter the middle).
-No direction arrows on the track (they overlapped holes).
-Seat 0 bottom, 1 left, 2 top, 3 right. `test/geometry_test.dart` guards this
-(consecutive holes are 1 pitch apart, or 0.707 across a corner). First
-version was a square ring going counter-clockwise — the user caught it.
+## Online protocol (lib/data/net + game_controller online mode)
+- Broker: `broker.hivemq.com` (tcp 1883 on Android/iOS, wss 8884 `/mqtt` on web).
+  `NetConfig` holds host/ports/topic root `jackaroo-hg/v1/<CODE>`.
+- Topics: `lobby` (retained, host), `join`/`leave` (clients), `state`
+  (retained snapshot `{seq,state}`, host), `moves` (host → all
+  `{seq,move,state}`), `intent` (client → host `{seq,move}`).
+- Host is authoritative: validates intents against `engine.legalMoves`, applies,
+  broadcasts; clients replay the move for animation then adopt the snapshot.
+  Bots run on the host only. Empty seats become bots at Start.
+- `GameController(online: OnlineSession)`; `viewSeat` = my seat online;
+  `isLocalSeat()` gates taps; clients only ever see their own hand.
+- Not yet: reconnect/rejoin after refresh, host leaving mid-game, play-again
+  online (buttons hidden), spectators. Retained lobby/state are cleared when
+  the host quits (OnlineSession.dispose).
 
-## What went wrong / gotchas
-- Bash heredocs with `'EOF'` failed on Dart files containing unicode (`♠`) — use
-  the Write tool or python for Dart files.
-- `Obx` reading `Get.locale` (non-observable) → red GetX error box. Fixed; but the
-  error kept showing because Chrome cached the old bundle → **hard refresh
-  (Ctrl+Shift+R)** before assuming a fix didn't land.
-- `flutter build web --base-href /jackaroo/` from Git Bash → "base-href should
-  start and end with /" (MSYS path mangling). Use `MSYS_NO_PATHCONV=1`.
-- No global git identity on this PC → set repo-local `user.name/email`
-  (done in both the project repo and `build/web`'s throwaway repo).
-- `flutter run -d chrome` in background can't take `r`/`R`; relaunch to see changes.
-
-## Current state
-- Web: LIVE with the cross board (redeployed after the geometry fix).
-- Android APK: `build/app/outputs/flutter-apk/app-release.apk` (~51 MB) builds
-  cleanly (no Gradle pins needed). Rebuilt after the geometry fix.
-- iOS: `ios/` folder exists; a real build needs a Mac + $99 Apple account. PWA is
-  the free route.
+## Gotchas (do not repeat)
+- **GetX SmartManagement disposed the GameController** when the lobby route was
+  replaced with `Get.offNamed('/game')` — widgets kept a stale reference and
+  `_run` silently bailed on `_disposed`, so the host never published. Fix:
+  `Get.put(..., permanent: true)` (both online launch and offline setup).
+- Git Bash heredocs with unicode/quotes in Dart broke twice — write Dart with
+  the Write tool or a python script file, not inline heredocs.
+- `Obx` must read an observable (Get.locale is not one).
+- Chrome caches the dev bundle: hard refresh (Ctrl+Shift+R) before debugging.
+- `flutter build web --base-href /jackaroo/` needs `MSYS_NO_PATHCONV=1` in Git Bash.
+- No global git identity on this PC: repo-local user.name/email are set in the
+  project repo AND must be set again in the throwaway `build/web` repo.
+- Public broker = anyone with the code can read the room. Fine for family play;
+  move `NetConfig.brokerHost` to your own Mosquitto if that matters.
+- shared_preferences on web is per origin: a new dev port forgets the name.
 
 ## Not yet verified
-- Jack swap / 7-split / discard flows in the real UI (engine-tested only).
-- Arabic RTL layout, landscape layout, small phones.
-- Audio on iOS Safari (needs a user gesture first — first tap on Play).
+- Real phones (only Chrome desktop + narrow window were exercised). Sound on
+  iOS Safari needs a first tap.
+- Arabic RTL layout, landscape.
+- Long online sessions (broker keep-alive 30s; no auto-reconnect UI).
 
-## Next steps (in order)
-1. Play a full game in the browser, especially J / 7 / 5-on-opponent flows.
-2. Online play: Firebase RTDB free tier + anonymous auth; room code; only `turn`
-   seat may write; hands under `hands/{uid}` readable only by that uid.
-3. Optional: sync to Ludo-style history/stats, more themes.
+## Redeploy
+```
+MSYS_NO_PATHCONV=1 flutter build web --release --base-href "/jackaroo/"
+cd build/web && git init && git config user.email ... && git config user.name ...
+git checkout -b gh-pages && git add -A && git commit -m deploy
+git push -f https://github.com/hamoodigan/jackaroo.git gh-pages
+flutter build apk --release
+```
 
 ## Key files
-- `lib/domain/engine/jackaroo_engine.dart` — all rules; `legalMoves(seat)` + `apply(move)`
-- `lib/domain/engine/bot_engine.dart` — heuristic AI (easy/normal/hard)
-- `lib/presentation/controllers/game_controller.dart` — tap flow: card → marble → target (→ second marble/target for 7-split; marble for J)
-- `lib/presentation/widgets/board_geometry.dart` / `board_painter.dart` / `board_view.dart`
-- `lib/core/localization/app_translations.dart` — EN + AR strings incl. rules text
-- `tool/make_sounds.dart` — regenerates `assets/sounds/*.wav`
-- Redeploy: `MSYS_NO_PATHCONV=1 flutter build web --release --base-href "/jackaroo/"`,
-  then in `build/web`: `git init`, commit, `git push -f https://github.com/hamoodigan/jackaroo.git gh-pages`
+- `lib/domain/engine/jackaroo_engine.dart` — all rules; `bot_engine.dart` — AI
+- `lib/presentation/controllers/game_controller.dart` — tap flow + online mode
+- `lib/presentation/controllers/online_controller.dart` — lobby create/join/start
+- `lib/data/net/*` — RoomService (mqtt_client), OnlineSession, NetConfig
+- `lib/presentation/widgets/board_geometry.dart` / `board_painter.dart`
+- `lib/presentation/screens/cards_screen.dart` — card guide (home, in-game ? icon, pause menu)
+- `test/` — engine, card_flow, geometry, online_flow, broker_connectivity, probe_room

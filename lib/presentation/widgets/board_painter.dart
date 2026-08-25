@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import '../../core/config/game_config.dart';
@@ -7,238 +5,179 @@ import '../../core/theme/app_theme.dart';
 import '../../domain/entities/position.dart';
 import 'board_geometry.dart';
 
-/// Static board art: wooden frame, felt, holes, coloured entry cells,
-/// home lanes, base plates and the centre medallion. Cached by Flutter
-/// because nothing here changes between frames.
+/// Static board art: mahogany octagon, cream holes, coloured base holes,
+/// tinted home lanes, waiting pockets and the cream centre octagon where
+/// the played card sits. Repainted only when the size changes.
 class BoardPainter extends CustomPainter {
   final BoardGeometry g;
-  final String title;
-  BoardPainter(this.g, this.title);
+  BoardPainter(this.g);
+
+  static const Color mahogany = Color(0xFF5C1F22);
+  static const Color mahoganyDark = Color(0xFF3A1114);
+  static const Color mahoganyLight = Color(0xFF7A2C30);
+  static const Color cream = Color(0xFFE9DCB8);
+  static const Color creamDark = Color(0xFFCBB98F);
+  static const Color holeShadow = Color(0xFF2A0B0D);
 
   @override
   void paint(Canvas canvas, Size size) {
-    final s = g.size;
-    final rect = Offset.zero & Size(s, s);
-    final frame = g.crossPath(g.d * 1.25, g.d * 0.9);
-    final felt = g.crossPath(g.d * 0.85, g.d * 0.7);
+    final rect = Offset.zero & Size(g.size, g.size);
+    final outer = g.octagon(g.apothem, corner: g.p * 0.35);
 
-    // Drop shadow + wooden frame.
+    // Shadow + wood.
     canvas.drawPath(
-        frame.shift(Offset(0, g.d * 0.25)),
+        outer.shift(Offset(0, g.p * 0.3)),
         Paint()
-          ..color = Colors.black.withValues(alpha: 0.45)
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, g.d * 0.5));
+          ..color = Colors.black.withValues(alpha: 0.5)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, g.p * 0.6));
     canvas.drawPath(
-      frame,
+      outer,
       Paint()
         ..shader = const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [AppTheme.woodLight, AppTheme.wood, Color(0xFF3E2814)],
+          colors: [mahoganyLight, mahogany, mahoganyDark],
+          stops: [0, 0.55, 1],
         ).createShader(rect),
     );
+    // Grain.
     canvas.save();
-    canvas.clipPath(frame);
+    canvas.clipPath(outer);
     final grain = Paint()
-      ..color = Colors.black.withValues(alpha: 0.10)
+      ..color = Colors.black.withValues(alpha: 0.12)
       ..strokeWidth = 1;
-    for (var i = 0; i < 24; i++) {
-      final y = s * (i / 24) + (i % 3) * 2.0;
-      canvas.drawLine(Offset(0, y), Offset(s, y + s * 0.02), grain);
+    for (var i = 0; i < 40; i++) {
+      final x = g.size * (i / 40) + (i % 3) * 1.5;
+      canvas.drawLine(Offset(x, 0), Offset(x + g.size * 0.03, g.size), grain);
     }
+    // Centre fold line like the real folding board.
+    canvas.drawLine(
+        Offset(g.size / 2, 0),
+        Offset(g.size / 2, g.size),
+        Paint()
+          ..color = Colors.black.withValues(alpha: 0.25)
+          ..strokeWidth = g.p * 0.12);
     canvas.restore();
     canvas.drawPath(
-      frame,
+      outer,
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.5
-        ..color = AppTheme.gold.withValues(alpha: 0.55),
+        ..color = AppTheme.gold.withValues(alpha: 0.5),
     );
 
-    // Felt.
-    canvas.drawPath(
-      felt,
-      Paint()
-        ..shader = RadialGradient(
-          radius: 0.75,
-          colors: [AppTheme.felt, AppTheme.feltDark],
-        ).createShader(rect),
-    );
-    canvas.drawPath(
-      felt,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.2
-        ..color = Colors.black.withValues(alpha: 0.35),
-    );
-
-    _drawBasePlates(canvas);
+    _drawPockets(canvas);
     _drawHomeLanes(canvas);
     _drawTrack(canvas);
     _drawCentre(canvas);
   }
 
-  void _hole(Canvas canvas, Offset c, double r,
-      {Color? ring, Color fill = const Color(0xFF0A1F18)}) {
+  void _hole(Canvas canvas, Offset c, double r, {Color? ring, Color? fill}) {
+    // Recessed look: dark rim below, cream disc, subtle inner shade.
     canvas.drawCircle(
-        c.translate(0, r * 0.18),
-        r,
-        Paint()
-          ..color = Colors.black.withValues(alpha: 0.35)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5));
-    canvas.drawCircle(c, r, Paint()..color = fill);
+        c.translate(0, r * 0.22),
+        r * 1.05,
+        Paint()..color = holeShadow.withValues(alpha: 0.7));
     canvas.drawCircle(
-        c,
-        r,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = r * 0.22
-          ..color = (ring ?? Colors.white).withValues(alpha: ring == null ? 0.10 : 0.9));
+      c,
+      r,
+      Paint()
+        ..shader = RadialGradient(
+          center: const Alignment(-0.3, -0.3),
+          colors: [fill ?? cream, fill == null ? creamDark : fill.withValues(alpha: 0.7)],
+        ).createShader(Rect.fromCircle(center: c, radius: r)),
+    );
+    if (ring != null) {
+      canvas.drawCircle(
+          c,
+          r * 1.5,
+          Paint()
+            ..color = ring.withValues(alpha: 0.22)
+            ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.7));
+      canvas.drawCircle(
+          c,
+          r * 1.12,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = r * 0.18
+            ..color = ring.withValues(alpha: 0.85));
+    }
   }
 
   void _drawTrack(Canvas canvas) {
     final r = g.cellRadius;
     for (var i = 0; i < GameConfig.trackLength; i++) {
-      final c = g.trackCell(i);
       Color? ring;
-      for (var seat = 0; seat < 4; seat++) {
+      for (var seat = 0; seat < GameConfig.seats; seat++) {
         if (Pos.entryCell(seat) == i) ring = AppTheme.seat(seat);
       }
-      if (ring != null) {
-        // Glow under the entry cell.
-        canvas.drawCircle(
-            c,
-            r * 1.9,
-            Paint()
-              ..color = ring.withValues(alpha: 0.28)
-              ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.9));
-      }
-      _hole(canvas, c, r, ring: ring);
+      _hole(canvas, g.trackCell(i), r, ring: ring);
     }
   }
 
   void _drawHomeLanes(Canvas canvas) {
-    for (var seat = 0; seat < 4; seat++) {
+    for (var seat = 0; seat < GameConfig.seats; seat++) {
       final color = AppTheme.seat(seat);
       final first = g.homeCell(seat, 0);
       final last = g.homeCell(seat, GameConfig.homeSize - 1);
-      final lane = Paint()
-        ..color = color.withValues(alpha: 0.18)
-        ..strokeWidth = g.d * 0.95
-        ..strokeCap = StrokeCap.round;
-      canvas.drawLine(first, last, lane);
+      canvas.drawLine(
+          first,
+          last,
+          Paint()
+            ..color = color.withValues(alpha: 0.22)
+            ..strokeWidth = g.p * 0.9
+            ..strokeCap = StrokeCap.round);
       for (var i = 0; i < GameConfig.homeSize; i++) {
         _hole(canvas, g.homeCell(seat, i), g.cellRadius,
-            ring: color.withValues(alpha: 0.75),
-            fill: AppTheme.seatDark[seat].withValues(alpha: 0.55));
+            fill: Color.lerp(cream, color, 0.35));
       }
     }
   }
 
-  void _drawBasePlates(Canvas canvas) {
-    for (var seat = 0; seat < 4; seat++) {
+  void _drawPockets(Canvas canvas) {
+    for (var seat = 0; seat < GameConfig.seats; seat++) {
       final color = AppTheme.seat(seat);
-      final pts = List.generate(4, (i) => g.baseCell(seat, i));
-      final cx = pts.map((p) => p.dx).reduce((a, b) => a + b) / 4;
-      final cy = pts.map((p) => p.dy).reduce((a, b) => a + b) / 4;
-      final plate = RRect.fromRectAndRadius(
-        Rect.fromCenter(center: Offset(cx, cy), width: g.d * 2.5, height: g.d * 2.5),
-        Radius.circular(g.d * 0.6),
-      );
-      final wood = RRect.fromRectAndRadius(
-          plate.outerRect.inflate(g.d * 0.35), Radius.circular(g.d * 0.85));
-      canvas.drawRRect(
-          wood.shift(Offset(0, g.d * 0.2)),
+      final c = g.pocketCentre(seat);
+      // Soft coloured glow marking the pocket.
+      canvas.drawCircle(
+          c,
+          g.p * 1.5,
           Paint()
-            ..color = Colors.black.withValues(alpha: 0.45)
-            ..maskFilter = MaskFilter.blur(BlurStyle.normal, g.d * 0.4));
-      canvas.drawRRect(
-          wood,
-          Paint()
-            ..shader = const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [AppTheme.woodLight, AppTheme.wood],
-            ).createShader(wood.outerRect));
-      canvas.drawRRect(
-          wood,
+            ..color = color.withValues(alpha: 0.18)
+            ..maskFilter = MaskFilter.blur(BlurStyle.normal, g.p * 0.7));
+      canvas.drawCircle(
+          c,
+          g.p * 1.35,
           Paint()
             ..style = PaintingStyle.stroke
-            ..strokeWidth = 1.2
-            ..color = AppTheme.gold.withValues(alpha: 0.5));
-      canvas.drawRRect(
-          plate,
-          Paint()
-            ..color = color.withValues(alpha: 0.30)
-            ..maskFilter = MaskFilter.blur(BlurStyle.normal, g.d * 0.5));
-      canvas.drawRRect(
-          plate,
-          Paint()
-            ..shader = LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [color.withValues(alpha: 0.45), AppTheme.seatDark[seat].withValues(alpha: 0.55)],
-            ).createShader(plate.outerRect));
-      canvas.drawRRect(
-          plate,
-          Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 1.2
-            ..color = color.withValues(alpha: 0.8));
-      for (final p in pts) {
-        _hole(canvas, p, g.cellRadius * 0.95, fill: const Color(0xFF071612));
+            ..strokeWidth = 1
+            ..color = color.withValues(alpha: 0.45));
+      for (var i = 0; i < GameConfig.marblesPerPlayer; i++) {
+        _hole(canvas, g.baseCell(seat, i), g.cellRadius * 0.95);
       }
     }
   }
 
   void _drawCentre(Canvas canvas) {
-    final c = g.centre;
-    final r = g.d * 2.1;
-    canvas.drawCircle(
-        c,
-        r * 1.25,
-        Paint()
-          ..color = AppTheme.gold.withValues(alpha: 0.08)
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.4));
-    canvas.drawCircle(
-        c,
-        r,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.5
-          ..color = AppTheme.gold.withValues(alpha: 0.45));
-    canvas.drawCircle(
-        c,
-        r * 0.86,
+    final inner = g.octagon(g.p * 3.3, corner: g.p * 0.2);
+    canvas.drawPath(
+        inner.shift(Offset(0, g.p * 0.1)),
+        Paint()..color = Colors.black.withValues(alpha: 0.35));
+    canvas.drawPath(
+      inner,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [cream, creamDark],
+        ).createShader(Rect.fromCircle(center: g.centre, radius: g.p * 3.5)),
+    );
+    canvas.drawPath(
+        inner,
         Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 0.8
-          ..color = AppTheme.gold.withValues(alpha: 0.3));
-    // Compass-like spokes.
-    for (var i = 0; i < 8; i++) {
-      final a = i * math.pi / 4;
-      final p1 = c + Offset(math.cos(a), math.sin(a)) * (r * 0.86);
-      final p2 = c + Offset(math.cos(a), math.sin(a)) * r;
-      canvas.drawLine(
-          p1, p2, Paint()..color = AppTheme.gold.withValues(alpha: 0.5));
-    }
-    final tp = TextPainter(
-      text: TextSpan(
-        text: title.toUpperCase(),
-        style: TextStyle(
-          color: AppTheme.gold.withValues(alpha: 0.85),
-          fontSize: r * 0.28,
-          letterSpacing: r * 0.06,
-          fontWeight: FontWeight.w700,
-          fontFamily: 'serif',
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    tp.paint(canvas, c - Offset(tp.width / 2, tp.height / 2));
+          ..strokeWidth = 1
+          ..color = AppTheme.goldDeep.withValues(alpha: 0.6));
   }
 
   @override
-  bool shouldRepaint(covariant BoardPainter old) =>
-      old.g.size != g.size || old.title != title;
+  bool shouldRepaint(covariant BoardPainter old) => old.g.size != g.size;
 }

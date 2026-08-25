@@ -9,8 +9,9 @@ class GameConfig {
   /// Total track cells (4 sides).
   static const int trackLength = cellsPerSide * 4;
 
-  /// Index (within its side) of the cell where a seat's marbles enter.
-  static const int entryOffset = 9;
+  /// Index (within its 19-hole segment) of a seat's base/entry hole. The
+  /// segment starts AT the base hole on the real board.
+  static const int entryOffset = 0;
 
   /// Cells in each seat's home lane.
   static const int homeSize = 4;
