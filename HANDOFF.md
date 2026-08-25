@@ -22,6 +22,15 @@ King burns path, can burn partner, 7 split.
 - Visual verification through windows-mcp screenshots caught nothing wrong in the
   final build; a played Ace exit + 3 bot turns worked in Chrome.
 
+## Board geometry (user-confirmed 2026-08-25)
+Classic CROSS-shaped board, marbles move CLOCKWISE. Each arm = 19 holes
+(7 up a side, 5 across the tip, 7 back), holes sit half a pitch past each
+corner so hole 9 = arm-tip centre = that seat's entry. Home column (4) runs
+from the tip toward the centre; 2×2 waiting cluster near the middle.
+Seat 0 bottom, 1 left, 2 top, 3 right. `test/geometry_test.dart` guards this
+(consecutive holes are 1 pitch apart, or 0.707 across a corner). First
+version was a square ring going counter-clockwise — the user caught it.
+
 ## What went wrong / gotchas
 - Bash heredocs with `'EOF'` failed on Dart files containing unicode (`♠`) — use
   the Write tool or python for Dart files.
@@ -35,11 +44,9 @@ King burns path, can burn partner, 7 split.
 - `flutter run -d chrome` in background can't take `r`/`R`; relaunch to see changes.
 
 ## Current state
-- Web: LIVE (Pages status was "building" at handoff; check the URL).
-- Android APK: `flutter build apk --release` was started at the end of the
-  session — check `build/app/outputs/flutter-apk/app-release.apk`. If Gradle fails
-  with the jni/`kotlin()` error, pin like Ludo (`dependency_overrides:
-  path_provider_android: 2.2.17`) — this project has no url_launcher.
+- Web: LIVE with the cross board (redeployed after the geometry fix).
+- Android APK: `build/app/outputs/flutter-apk/app-release.apk` (~51 MB) builds
+  cleanly (no Gradle pins needed). Rebuilt after the geometry fix.
 - iOS: `ios/` folder exists; a real build needs a Mac + $99 Apple account. PWA is
   the free route.
 

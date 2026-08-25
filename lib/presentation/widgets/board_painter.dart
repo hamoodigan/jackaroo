@@ -19,10 +19,16 @@ class BoardPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final s = g.size;
     final rect = Offset.zero & Size(s, s);
+    final frame = g.crossPath(g.d * 1.25, g.d * 0.9);
+    final felt = g.crossPath(g.d * 0.85, g.d * 0.7);
 
-    // Wooden frame.
-    final frame = RRect.fromRectAndRadius(rect, Radius.circular(s * 0.06));
-    canvas.drawRRect(
+    // Drop shadow + wooden frame.
+    canvas.drawPath(
+        frame.shift(Offset(0, g.d * 0.25)),
+        Paint()
+          ..color = Colors.black.withValues(alpha: 0.45)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, g.d * 0.5));
+    canvas.drawPath(
       frame,
       Paint()
         ..shader = const LinearGradient(
@@ -31,7 +37,8 @@ class BoardPainter extends CustomPainter {
           colors: [AppTheme.woodLight, AppTheme.wood, Color(0xFF3E2814)],
         ).createShader(rect),
     );
-    // Wood grain lines.
+    canvas.save();
+    canvas.clipPath(frame);
     final grain = Paint()
       ..color = Colors.black.withValues(alpha: 0.10)
       ..strokeWidth = 1;
@@ -39,30 +46,25 @@ class BoardPainter extends CustomPainter {
       final y = s * (i / 24) + (i % 3) * 2.0;
       canvas.drawLine(Offset(0, y), Offset(s, y + s * 0.02), grain);
     }
-    canvas.drawRRect(
-      frame.deflate(1.5),
+    canvas.restore();
+    canvas.drawPath(
+      frame,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2
+        ..strokeWidth = 1.5
         ..color = AppTheme.gold.withValues(alpha: 0.55),
     );
 
     // Felt.
-    final inset = g.margin * 0.45;
-    final feltRect = rect.deflate(inset);
-    final felt = RRect.fromRectAndRadius(feltRect, Radius.circular(s * 0.045));
-    canvas.drawRRect(
+    canvas.drawPath(
       felt,
       Paint()
         ..shader = RadialGradient(
-          radius: 0.9,
-          colors: [
-            AppTheme.felt.withValues(alpha: 1),
-            AppTheme.feltDark,
-          ],
-        ).createShader(feltRect),
+          radius: 0.75,
+          colors: [AppTheme.felt, AppTheme.feltDark],
+        ).createShader(rect),
     );
-    canvas.drawRRect(
+    canvas.drawPath(
       felt,
       Paint()
         ..style = PaintingStyle.stroke
@@ -189,7 +191,7 @@ class BoardPainter extends CustomPainter {
 
   void _drawCentre(Canvas canvas) {
     final c = g.centre;
-    final r = g.d * 3.2;
+    final r = g.d * 2.1;
     canvas.drawCircle(
         c,
         r * 1.25,

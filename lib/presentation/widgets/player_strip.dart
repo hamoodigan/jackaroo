@@ -34,13 +34,13 @@ class PlayerStrip extends StatelessWidget {
       }
       return Row(
         children: [
-          Expanded(child: chips[3]),
+          Expanded(child: chips[1]),
           const SizedBox(width: 6),
           Expanded(child: chips[2]),
           const SizedBox(width: 6),
           centre,
           const SizedBox(width: 6),
-          Expanded(child: chips[1]),
+          Expanded(child: chips[3]),
           const SizedBox(width: 6),
           Expanded(child: chips[0]),
         ],
