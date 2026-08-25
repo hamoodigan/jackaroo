@@ -204,7 +204,8 @@ void main() {
     host.state.hands[0] = [1]; // 2 with nothing out → discard
     host.state.turn = 0;
     host.refreshTurn();
-    host.tapCard(1);
+    host.tapCard(1); // select
+    host.tapCard(1); // confirm the burn
     await host.settle();
     await pump(700);
     final snap = broker.retained['$base/state']!;

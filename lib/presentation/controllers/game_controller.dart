@@ -70,6 +70,9 @@ class GameController extends GetxController {
   final selectedMarble = Rxn<MarbleRef>();
   final highlightMarbles = <MarbleRef>{}.obs;
   final targets = <Target>[].obs;
+
+  /// Absolute track holes lit in the mover's colour for the current options.
+  final pathCells = <int>{}.obs;
   final lastPlayed = RxnInt();
   final message = ''.obs;
 
@@ -213,6 +216,7 @@ class GameController extends GetxController {
   }
 
   void _resetSelection() {
+    pathCells.clear();
     specialMove.value = null;
     selectedCard.value = null;
     selectedMarble.value = null;
@@ -230,31 +234,56 @@ class GameController extends GetxController {
 
   // ── taps ──────────────────────────────────────────────────────────────
 
+  /// First tap selects the card and lights every option on the board;
+  /// a second tap on the same card plays it when it has exactly one option
+  /// (or burns it when nothing can be played).
   void tapCard(int cardId) {
     if (!selecting) return;
-    if (selectedCard.value == cardId) {
-      cancelSelection();
-      return;
-    }
-    if (mustDiscard) {
-      final mv = _moves.firstWhere((m) => m.cardId == cardId);
-      message.value = 'discarded'.trParams({'name': current.name});
-      _apply(mv);
-      return;
-    }
     final forCard = _moves.where((m) => m.cardId == cardId).toList();
     if (forCard.isEmpty) return;
+    if (selectedCard.value == cardId) {
+      if (mustDiscard) {
+        message.value = 'discarded'.trParams({'name': current.name});
+        _apply(forCard.first);
+      } else if (forCard.length == 1 && forCard.first.kind != MoveKind.split) {
+        _apply(forCard.first);
+      } else if (specialMove.value != null && highlightMarbles.isEmpty) {
+        _apply(specialMove.value!);
+      } else {
+        message.value = 'pick_target'.tr;
+      }
+      return;
+    }
     audio?.play(Sfx.card);
     _resetSelection();
     selectedCard.value = cardId;
+    if (mustDiscard) {
+      phase.value = Phase.pickMarble;
+      message.value = 'tap_again_discard'.tr;
+      return;
+    }
     highlightMarbles.assignAll(
         forCard.where((m) => m.marble != null).map((m) => m.marble!));
     specialMove.value = forCard.firstWhereOrNull(
         (m) => m.kind == MoveKind.forceDiscard || m.kind == MoveKind.steal);
+    // Light every reachable destination and the paths to them.
+    targets.assignAll(forCard
+        .where((m) => m.marble != null && m.kind != MoveKind.swap)
+        .map((m) => Target(m.marble!.seat, m.to))
+        .toSet());
+    pathCells.addAll(forCard.expand(engine.pathCells));
     phase.value = Phase.pickMarble;
-    message.value = specialMove.value == null
-        ? 'pick_marble'.tr
-        : (highlightMarbles.isEmpty ? 'pick_power'.tr : 'pick_action'.tr);
+    final single = forCard.length == 1 && forCard.first.kind != MoveKind.split;
+    message.value = single
+        ? 'tap_again_play'.tr
+        : specialMove.value == null
+            ? 'pick_target'.tr
+            : (highlightMarbles.isEmpty ? 'pick_power'.tr : 'pick_action'.tr);
+  }
+
+  /// Tapping the felt (no marble / target) clears the selection.
+  void tapBackground() {
+    if (selectedCard.value != null) cancelSelection();
   }
 
   /// Plays the selected card's power (10 → force discard, Q → steal).
@@ -330,6 +359,9 @@ class GameController extends GetxController {
   void _selectMarble(MarbleRef ref) {
     selectedMarble.value = ref;
     final mine = _cardMoves.where((m) => m.marble == ref).toList();
+    pathCells
+      ..clear()
+      ..addAll(mine.expand(engine.pathCells));
     if (mine.first.kind == MoveKind.swap) {
       _swapMode = true;
       highlightMarbles.assignAll(mine.map((m) => m.marble2!));
@@ -353,6 +385,23 @@ class GameController extends GetxController {
   }
 
   void tapTarget(Target t) {
+    if (phase.value == Phase.pickMarble && selectedMarble.value == null) {
+      // Destination tapped straight after picking the card: resolve the
+      // marble from the destination when it is unambiguous.
+      final hits = _cardMoves
+          .where((m) => m.marble != null && m.marble!.seat == t.seat && m.to == t.pos)
+          .toList();
+      final marbles = hits.map((m) => m.marble!).toSet();
+      if (marbles.length != 1) {
+        if (marbles.length > 1) message.value = 'pick_marble'.tr;
+        return;
+      }
+      selectedMarble.value = marbles.first;
+      pathCells
+        ..clear()
+        ..addAll(hits.expand(engine.pathCells));
+      phase.value = Phase.pickTarget;
+    }
     if (phase.value == Phase.pickTarget) {
       final ref = selectedMarble.value;
       if (ref == null) return;

@@ -191,20 +191,45 @@ void main() {
     final c = make();
     arrange(c, [card(2), card(3)]);
     expect(c.mustDiscard, isTrue);
-    c.tapCard(card(3));
+    c.tapCard(card(3)); // select
+    expect(c.state.hands[0].length, 2);
+    c.tapCard(card(3)); // confirm
     await settle(c);
     expect(c.state.hands[0], [card(2)]);
     expect(c.state.discard.contains(card(3)), isTrue);
     expect(c.state.turn, 1);
   });
 
-  test('tapping the selected card again cancels the selection', () async {
+  test('tap once lights destinations + paths, tap again plays a single option', () async {
+    final c = make();
+    arrange(c, [card(3)], marbles: {(0, 0): 4});
+    c.tapCard(card(3));
+    expect(c.targets.map((t) => t.pos).toList(), [7]);
+    expect(c.pathCells, {Pos.abs(0, 5), Pos.abs(0, 6), Pos.abs(0, 7)});
+    c.tapCard(card(3)); // second tap plays
+    await settle(c);
+    expect(c.state.marbles[0][0], 7);
+  });
+
+  test('tap a lit destination directly after selecting the card', () async {
+    final c = make();
+    arrange(c, [card(1)], marbles: {(0, 0): 5});
+    c.tapCard(card(1));
+    // 1 and 11 for the marble on the track, plus the exit for a pocket marble.
+    expect(c.targets.map((t) => t.pos).toSet(), {0, 6, 16});
+    c.tapTarget(const Target(0, 16));
+    await settle(c);
+    expect(c.state.marbles[0][0], 16);
+  });
+
+  test('tapping the felt cancels the selection', () async {
     final c = make();
     arrange(c, [card(1)]);
     c.tapCard(card(1));
-    c.tapCard(card(1));
+    c.tapBackground();
     expect(c.phase.value, Phase.pickCard);
     expect(c.highlightMarbles, isEmpty);
+    expect(c.pathCells, isEmpty);
   });
 
   test('10 and Queen: power button appears next to marble moves', () async {

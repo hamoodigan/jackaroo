@@ -65,11 +65,21 @@ class BoardView extends StatelessWidget {
                   final ts = c.targets;
                   final hl = c.highlightMarbles;
                   final lm = c.lastMoved;
+                  final paths = c.pathCells;
+                  final moverColor = AppTheme.seat(c.turn);
                   final sel = c.selectedMarble.value;
                   return Stack(
                     clipBehavior: Clip.none,
                     children: [
-                      for (final t in ts) _TargetMarker(g: g, target: t, seat: t.seat),
+                      if (paths.isNotEmpty)
+                        IgnorePointer(
+                          child: CustomPaint(
+                            size: Size(g.size, g.size),
+                            painter: _PathPainter(g, paths.toList(), moverColor),
+                          ),
+                        ),
+                      for (final t in ts)
+                        _TargetMarker(g: g, target: t, color: moverColor),
                       for (var s = 0; s < GameConfig.seats; s++)
                         for (var i = 0; i < GameConfig.marblesPerPlayer; i++)
                           _Marble(
@@ -119,7 +129,11 @@ class BoardView extends StatelessWidget {
         bt = t;
       }
     }
-    if (bt != null) c.tapTarget(bt);
+    if (bt != null) {
+      c.tapTarget(bt);
+      return;
+    }
+    c.tapBackground();
   }
 }
 
@@ -250,11 +264,38 @@ class _MarbleBodyState extends State<_MarbleBody>
   }
 }
 
+/// Translucent discs in the mover's colour along the possible paths.
+class _PathPainter extends CustomPainter {
+  final BoardGeometry g;
+  final List<int> cells;
+  final Color color;
+  _PathPainter(this.g, this.cells, this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final r = g.cellRadius;
+    for (final cell in cells) {
+      final c = g.trackCell(cell);
+      canvas.drawCircle(
+          c,
+          r * 1.35,
+          Paint()
+            ..color = color.withValues(alpha: 0.28)
+            ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.5));
+      canvas.drawCircle(c, r * 0.55, Paint()..color = color.withValues(alpha: 0.85));
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _PathPainter old) =>
+      old.cells != cells || old.color != color || old.g.size != g.size;
+}
+
 class _TargetMarker extends StatefulWidget {
   final BoardGeometry g;
   final Target target;
-  final int seat;
-  const _TargetMarker({required this.g, required this.target, required this.seat});
+  final Color color;
+  const _TargetMarker({required this.g, required this.target, required this.color});
 
   @override
   State<_TargetMarker> createState() => _TargetMarkerState();
@@ -289,7 +330,7 @@ class _TargetMarkerState extends State<_TargetMarker>
           builder: (_, _) {
             final t = _c.value;
             return CustomPaint(
-              painter: _RingPainter(t, AppTheme.seat(widget.seat)),
+              painter: _RingPainter(t, widget.color),
             );
           },
         ),
@@ -307,22 +348,30 @@ class _RingPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final c = Offset(size.width / 2, size.height / 2);
     final rMax = size.width / 2;
+    // Pulsing light in the player's colour.
+    final pulse = 0.5 + 0.5 * (1 - (2 * t - 1).abs());
     canvas.drawCircle(
-        c, rMax * 0.5, Paint()..color = AppTheme.gold.withValues(alpha: 0.35));
+        c,
+        rMax * 0.75,
+        Paint()
+          ..color = color.withValues(alpha: 0.25 + 0.35 * pulse)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, rMax * 0.4));
+    canvas.drawCircle(
+        c, rMax * 0.5, Paint()..color = color.withValues(alpha: 0.55 + 0.3 * pulse));
     canvas.drawCircle(
         c,
         rMax * 0.5,
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = 2
-          ..color = AppTheme.gold);
+          ..color = Colors.white.withValues(alpha: 0.9));
     canvas.drawCircle(
         c,
         rMax * (0.5 + 0.5 * t),
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = 2
-          ..color = AppTheme.gold.withValues(alpha: 1 - t));
+          ..color = color.withValues(alpha: 1 - t));
   }
 
   @override

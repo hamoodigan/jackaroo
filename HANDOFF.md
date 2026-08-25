@@ -1,5 +1,7 @@
 # Session Handoff — 2026-08-25
 
+> **Projects Hub** (all handoffs in one dashboard): run `Desktop\Work\Projects\Open-Projects-Hub.cmd`, then open http://localhost:4680/ — this file shows up there as a card.
+
 ## TL;DR
 Built a complete Flutter Jackaroo game from zero in one session (offline pass-and-play + bots, online rooms, card guide, EN/AR), iterated live with the user on the board shape three times until it matched a photo of the real octagonal board, then added the user's house rules for 10 and Queen. Everything is deployed: web PWA at https://hamoodigan.github.io/jackaroo/ (GitHub `hamoodigan/jackaroo`, source `main`, build `gh-pages`), APK at `build/app/outputs/flutter-apk/app-release.apk` (52 MB). 53 tests green; online play verified host↔guest in two browser windows on the real broker.
 
@@ -45,6 +47,9 @@ Built a complete Flutter Jackaroo game from zero in one session (offline pass-an
 - Bots/remote players animate 1.7× slower (`GameConfig.botSlow`) and every marble they moved keeps a gold ring (`GameController.lastMoved`) until the next move.
 - Base hole = the corner (apex) hole beside the seat's pocket; the home lane branches at rel 74 (`GameConfig.homeBranch`), two holes before the base. Consequences in the engine: `_advances()` returns BOTH the track hole and the home slot when both fit (player chooses), track moves wrap past the base (a marble that misses the lane goes around again). Base hole is tinted + ringed in the seat colour.
 - Rejoin: stable `LocalStorage.playerId`, `lastRoom` code, "Rejoin room XXXX" button on the Online screen (`OnlineController.rejoin`): re-reads retained lobby + state; host resumes as authority with `initialState`, guests relaunch from the snapshot. Quitting a game or leaving the lobby forgets the room. Verified only by `test/online_flow_test.dart` "rejoin" (controller level) — the UI flow was NOT exercised live because the user was using the PC.
+
+- Card mechanic (user request): tap a card once → it lifts, every reachable destination pulses in the player's colour (`_TargetMarker`/`_RingPainter` now take a colour) and the path holes are dotted in that colour (`GameController.pathCells` from `engine.pathCells(move)`, drawn by `_PathPainter`). Tap a lit destination to move (marble resolved automatically when unambiguous), or tap the same card again to play it when it has one option / to burn it when nothing is playable. Tapping bare felt cancels (`tapBackground`). Marble-first flows (7 split, Jack swap) still work.
+- Full-game check: `test/engine_test.dart` "40 full bot games" plays 40 seeded games with mixed rules and asserts after EVERY move: 4 marbles per seat, no two marbles on one hole, unique home slots, 52 cards accounted for and unique, bot only picks legal moves, game finishes with all 8 team marbles home. Passed first time. No live UI play-through was done for this batch (user was using the PC).
 
 ## Current state & next steps
 - Done & live: octagon board, all cards incl. new 10/Queen powers + toggles, card guide (home / in-game ? / pause menu), online rooms, EN/AR, PWA + APK, docs, 53 tests.

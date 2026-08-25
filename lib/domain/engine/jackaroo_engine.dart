@@ -353,6 +353,29 @@ class JackarooEngine {
   List<List<int>> _copy(List<List<int>> m) =>
       m.map((r) => List<int>.from(r)).toList();
 
+  /// Absolute track holes the primary marble of [m] would cross (including
+  /// the destination when it stays on the track). Used to light the path.
+  List<int> pathCells(Move m) {
+    final ref = m.marble;
+    if (ref == null) return const [];
+    final from = state.marbles[ref.seat][ref.idx];
+    if (!Pos.isTrack(from)) return const [];
+    final owner = ref.seat;
+    switch (m.kind) {
+      case MoveKind.advance:
+      case MoveKind.split:
+        final end = Pos.isHome(m.to) ? GameConfig.homeBranch : from + m.steps;
+        return [for (var r = from + 1; r <= end; r++) Pos.abs(owner, r)];
+      case MoveKind.back:
+        return [
+          for (var k = 1; k <= m.steps; k++)
+            Pos.abs(owner, (from - k + _track) % _track)
+        ];
+      default:
+        return const [];
+    }
+  }
+
   // ── Applying ───────────────────────────────────────────────────────────
 
   /// Applies [move], advances the turn and deals a new round when every

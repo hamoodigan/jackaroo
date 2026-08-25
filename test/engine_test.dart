@@ -349,4 +349,58 @@ void main() {
     final moves = engineWith(s).movesForCard(0, two);
     expect(moves.single.to, 1); // 75 → base (0) → 1, no lane on the way
   });
+
+  test('40 full bot games: every move keeps the board consistent', () {
+    for (var seed = 1; seed <= 40; seed++) {
+      final s = GameState.fresh(
+        List.generate(4, (i) => PlayerSlot(seat: i, name: 'B$i', isBot: true)),
+        RuleSet(jackSwapAny: seed.isEven, canBurnPartner: seed % 3 != 0),
+      );
+      final e = JackarooEngine(s, seed: seed);
+      final bot = BotEngine(e, seed: seed);
+      e.startGame();
+      var moves = 0;
+      while (!s.isOver && moves < 6000) {
+        final seat = s.turn;
+        expect(s.hands[seat], isNotEmpty, reason: 'seed $seed: empty hand on turn');
+        final legal = e.legalMoves(seat);
+        final mv = bot.choose(seat, s.players[seat].level);
+        expect(legal.any((m) => m.toJson().toString() == mv.toJson().toString()),
+            isTrue, reason: 'seed $seed: bot chose an illegal move');
+        e.apply(mv);
+        moves++;
+        // Invariants.
+        final onTrack = <int, String>{};
+        for (var st = 0; st < 4; st++) {
+          expect(s.marbles[st].length, 4);
+          final homes = <int>{};
+          for (var i = 0; i < 4; i++) {
+            final p = s.marbles[st][i];
+            expect(Pos.isBase(p) || Pos.isTrack(p) || Pos.isHome(p), isTrue,
+                reason: 'seed $seed move $moves: bad pos $p');
+            if (Pos.isTrack(p)) {
+              final cell = Pos.abs(st, p);
+              expect(onTrack.containsKey(cell), isFalse,
+                  reason: 'seed $seed move $moves: two marbles on hole $cell');
+              onTrack[cell] = 'M$st.$i';
+            }
+            if (Pos.isHome(p)) {
+              expect(homes.add(Pos.homeIndex(p)), isTrue,
+                  reason: 'seed $seed: two marbles in one home slot');
+              expect(Pos.homeIndex(p) < GameConfig.homeSize, isTrue);
+            }
+          }
+        }
+        final cards = s.deck.length +
+            s.discard.length +
+            s.hands.fold<int>(0, (a, h) => a + h.length);
+        expect(cards, 52, reason: 'seed $seed move $moves: cards leaked');
+        expect((s.deck + s.discard + s.hands.expand((h) => h).toList()).toSet().length,
+            52, reason: 'seed $seed: duplicate card');
+      }
+      expect(s.isOver, isTrue, reason: 'seed $seed did not finish');
+      final w = s.winnerTeam!;
+      expect(s.allHome(w) && s.allHome(w + 2), isTrue);
+    }
+  });
 }
