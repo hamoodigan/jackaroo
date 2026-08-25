@@ -115,25 +115,6 @@ class BoardPainter extends CustomPainter {
       }
       _hole(canvas, c, r, ring: ring);
     }
-    // Direction arrows near each entry.
-    for (var seat = 0; seat < 4; seat++) {
-      final a = g.trackCell(Pos.abs(seat, 2));
-      final b = g.trackCell(Pos.abs(seat, 3));
-      final dir = (b - a) / (b - a).distance;
-      final mid = a + dir * (g.d * 0.5);
-      _arrow(canvas, mid, dir, g.d * 0.28, AppTheme.seat(seat).withValues(alpha: 0.7));
-    }
-  }
-
-  void _arrow(Canvas canvas, Offset at, Offset dir, double len, Color color) {
-    final n = Offset(-dir.dy, dir.dx);
-    final tip = at + dir * len;
-    final path = Path()
-      ..moveTo(tip.dx, tip.dy)
-      ..lineTo((at + n * len * 0.7).dx, (at + n * len * 0.7).dy)
-      ..lineTo((at - n * len * 0.7).dx, (at - n * len * 0.7).dy)
-      ..close();
-    canvas.drawPath(path, Paint()..color = color);
   }
 
   void _drawHomeLanes(Canvas canvas) {
@@ -164,6 +145,27 @@ class BoardPainter extends CustomPainter {
         Rect.fromCenter(center: Offset(cx, cy), width: g.d * 2.5, height: g.d * 2.5),
         Radius.circular(g.d * 0.6),
       );
+      final wood = RRect.fromRectAndRadius(
+          plate.outerRect.inflate(g.d * 0.35), Radius.circular(g.d * 0.85));
+      canvas.drawRRect(
+          wood.shift(Offset(0, g.d * 0.2)),
+          Paint()
+            ..color = Colors.black.withValues(alpha: 0.45)
+            ..maskFilter = MaskFilter.blur(BlurStyle.normal, g.d * 0.4));
+      canvas.drawRRect(
+          wood,
+          Paint()
+            ..shader = const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [AppTheme.woodLight, AppTheme.wood],
+            ).createShader(wood.outerRect));
+      canvas.drawRRect(
+          wood,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.2
+            ..color = AppTheme.gold.withValues(alpha: 0.5));
       canvas.drawRRect(
           plate,
           Paint()

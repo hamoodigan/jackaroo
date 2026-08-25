@@ -26,7 +26,9 @@ King burns path, can burn partner, 7 split.
 Classic CROSS-shaped board, marbles move CLOCKWISE. Each arm = 19 holes
 (7 up a side, 5 across the tip, 7 back), holes sit half a pitch past each
 corner so hole 9 = arm-tip centre = that seat's entry. Home column (4) runs
-from the tip toward the centre; 2×2 waiting cluster near the middle.
+from the tip toward the centre; the 2×2 WAITING pocket sits OUTSIDE the cross
+in the corner between arms (user: only home-bound marbles enter the middle).
+No direction arrows on the track (they overlapped holes).
 Seat 0 bottom, 1 left, 2 top, 3 right. `test/geometry_test.dart` guards this
 (consecutive holes are 1 pitch apart, or 0.707 across a corner). First
 version was a square ring going counter-clockwise — the user caught it.

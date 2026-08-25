@@ -11,7 +11,7 @@ import '../../domain/entities/position.dart';
 /// owns the bottom arm, seat 1 the left, seat 2 the top, seat 3 the right.
 /// A seat's entry hole is the centre of its arm tip, the 4 home holes run
 /// from the tip toward the centre, and the 4 waiting holes sit in a 2×2
-/// cluster near the middle of the board.
+/// pocket outside the cross, in the corner between two arms.
 class BoardGeometry {
   final double size;
 
@@ -92,9 +92,12 @@ class BoardGeometry {
 
   Offset homeCell(int seat, int i) => tip(seat) + inward[seat] * ((i + 1) * d);
 
-  /// 2×2 waiting cluster between the home column and the centre.
+  /// 2×2 waiting pocket OUTSIDE the cross, in the corner just before the
+  /// seat's arm (clockwise). Only marbles heading home enter the middle.
   Offset baseCell(int seat, int i) {
-    final c = tip(seat) + inward[seat] * (6.1 * d);
+    final corner = _start(seat) - centre; // (±a, ±a)
+    final sx = corner.dx.sign, sy = corner.dy.sign;
+    final c = centre + Offset(sx * (armHalf + 2.4 * d), sy * (armHalf + 2.4 * d));
     final dx = (i % 2 == 0 ? -0.55 : 0.55) * d;
     final dy = (i < 2 ? -0.55 : 0.55) * d;
     return c + Offset(dx, dy);
