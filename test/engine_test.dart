@@ -1,0 +1,275 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:jackaroo/core/config/game_config.dart';
+import 'package:jackaroo/domain/engine/bot_engine.dart';
+import 'package:jackaroo/domain/engine/jackaroo_engine.dart';
+import 'package:jackaroo/domain/entities/game_state.dart';
+import 'package:jackaroo/domain/entities/move.dart';
+import 'package:jackaroo/domain/entities/player.dart';
+import 'package:jackaroo/domain/entities/position.dart';
+import 'package:jackaroo/domain/entities/rules.dart';
+
+// Card ids: rank = id % 13 + 1 (spades suit for id < 13).
+const ace = 0, two = 1, four = 3, five = 4, seven = 6, jack = 10, king = 12;
+
+GameState fresh({RuleSet rules = const RuleSet()}) => GameState.fresh(
+      List.generate(4, (i) => PlayerSlot(seat: i, name: 'P$i')),
+      rules,
+    );
+
+JackarooEngine engineWith(GameState s) => JackarooEngine(s, seed: 1);
+
+void main() {
+  test('geometry: abs/rel round-trip and entry cells are distinct', () {
+    final entries = List.generate(4, Pos.entryCell).toSet();
+    expect(entries.length, 4);
+    for (var s = 0; s < 4; s++) {
+      for (var r = 0; r < GameConfig.trackLength; r++) {
+        expect(Pos.rel(s, Pos.abs(s, r)), r);
+      }
+    }
+  });
+
+  test('startGame deals 4 cards each from a 52-card deck', () {
+    final s = fresh();
+    engineWith(s).startGame();
+    expect(s.hands.every((h) => h.length == 4), isTrue);
+    expect(s.deck.length, 52 - 16);
+    expect(s.round, 1);
+  });
+
+  test('ace and king exit a marble; numbers cannot', () {
+    final s = fresh();
+    s.hands[0] = [ace, king, two];
+    final moves = engineWith(s).legalMoves(0);
+    final exits = moves.where((m) => m.kind == MoveKind.exitBase).toList();
+    expect(exits.length, 2);
+    expect(moves.where((m) => m.cardId == two), isEmpty);
+  });
+
+  test('no legal move → discard options for every card', () {
+    final s = fresh();
+    s.hands[0] = [two, four];
+    final moves = engineWith(s).legalMoves(0);
+    expect(moves.length, 2);
+    expect(moves.every((m) => m.kind == MoveKind.discard), isTrue);
+  });
+
+  test('advance captures an opponent and sends it to base', () {
+    final s = fresh();
+    s.marbles[0][0] = 3;
+    s.marbles[1][0] = Pos.rel(1, Pos.abs(0, 5)); // opponent 2 cells ahead
+    s.hands[0] = [two];
+    final e = engineWith(s);
+    final mv = e.legalMoves(0).single;
+    final events = e.apply(mv);
+    expect(s.marbles[0][0], 5);
+    expect(s.marbles[1][0], Pos.base);
+    expect(events.any((ev) => ev.captured), isTrue);
+    expect(s.captures[0], 1);
+    expect(s.turn, 1);
+  });
+
+  test('cannot land on own marble or pass a marble on its own entry', () {
+    final s = fresh();
+    s.marbles[0][0] = 3;
+    s.marbles[0][1] = 5;
+    s.hands[0] = [two];
+    var moves = engineWith(s).movesForCard(0, two);
+    // marble 0 → 5 blocked (own), marble 1 → 7 fine
+    expect(moves.length, 1);
+    expect(moves.single.marble, const MarbleRef(0, 1));
+
+    // Opponent sitting on its own entry cell blocks the way.
+    final s2 = fresh();
+    s2.marbles[1][0] = 0; // seat 1 on its own entry (abs 28)
+    s2.marbles[0][0] = Pos.rel(0, Pos.entryCell(1)) - 1; // just behind it
+    s2.hands[0] = [two];
+    expect(engineWith(s2).movesForCard(0, two), isEmpty);
+  });
+
+  test('back 4 from entry then forward enters home (classic trick)', () {
+    final s = fresh();
+    s.marbles[0][0] = 0;
+    s.hands[0] = [four];
+    final e = engineWith(s);
+    final back = e.legalMoves(0).single;
+    expect(back.kind, MoveKind.back);
+    e.apply(back);
+    expect(s.marbles[0][0], GameConfig.trackLength - 4);
+    s.turn = 0;
+    s.hands[0] = [seven];
+    final mv = e
+        .movesForCard(0, seven)
+        .firstWhere((m) => m.kind == MoveKind.advance);
+    expect(mv.to, Pos.home(3));
+    e.apply(mv);
+    expect(Pos.isHome(s.marbles[0][0]), isTrue);
+  });
+
+  test('home lane: exact fit, no passing own marbles', () {
+    final s = fresh();
+    s.marbles[0][0] = Pos.home(2);
+    s.marbles[0][1] = GameConfig.trackLength - 2; // 2 from threshold
+    s.hands[0] = [five, two];
+    final e = engineWith(s);
+    // 5 → would be home index 3 but must pass home 2 → illegal.
+    expect(e.movesForCard(0, five), isEmpty);
+    // 2 → home index 0, fine.
+    final m = e.movesForCard(0, two);
+    expect(m.length, 1);
+    expect(m.single.to, Pos.home(0));
+  });
+
+  test('jack: board rule swaps any two marbles, app rule needs own', () {
+    final s = fresh();
+    s.marbles[1][0] = 5;
+    s.marbles[3][0] = 9;
+    s.marbles[0][0] = 2;
+    s.hands[0] = [jack];
+    final any = engineWith(s).movesForCard(0, jack);
+    // pairs (ordered): 0-1,0-3,1-0,1-3,3-0,3-1 = 6
+    expect(any.length, 6);
+    expect(
+        any.any((m) => m.marble!.seat == 1 && m.marble2!.seat == 3), isTrue);
+
+    final s2 = fresh(rules: const RuleSet(jackSwapAny: false));
+    s2.marbles[1][0] = 5;
+    s2.marbles[3][0] = 9;
+    s2.marbles[0][0] = 2;
+    s2.hands[0] = [jack];
+    final own = engineWith(s2).movesForCard(0, jack);
+    expect(own.length, 2);
+    expect(own.every((m) => m.marble!.seat == 0), isTrue);
+  });
+
+  test('jack swap moves both marbles to each other\'s cells', () {
+    final s = fresh();
+    s.marbles[0][0] = 2;
+    s.marbles[1][0] = 5;
+    s.hands[0] = [jack];
+    final e = engineWith(s);
+    final mv = e.movesForCard(0, jack).firstWhere((m) => m.marble!.seat == 0);
+    final aCell = Pos.abs(0, 2), bCell = Pos.abs(1, 5);
+    e.apply(mv);
+    expect(Pos.abs(0, s.marbles[0][0]), bCell);
+    expect(Pos.abs(1, s.marbles[1][0]), aCell);
+  });
+
+  test('marble on its own entry cannot be swapped', () {
+    final s = fresh();
+    s.marbles[0][0] = 2;
+    s.marbles[1][0] = 0;
+    s.hands[0] = [jack];
+    expect(engineWith(s).movesForCard(0, jack), isEmpty);
+  });
+
+  test('five can move an opponent marble when the rule is on', () {
+    final s = fresh();
+    s.marbles[1][0] = 5;
+    s.hands[0] = [five];
+    final on = engineWith(s).movesForCard(0, five);
+    expect(on.length, 1);
+    expect(on.single.marble, const MarbleRef(1, 0));
+    final s2 = fresh(rules: const RuleSet(fiveMovesAny: false));
+    s2.marbles[1][0] = 5;
+    s2.hands[0] = [five];
+    expect(engineWith(s2).movesForCard(0, five), isEmpty);
+  });
+
+  test('seven splits between two marbles', () {
+    final s = fresh();
+    s.marbles[0][0] = 2;
+    s.marbles[0][1] = 20;
+    s.hands[0] = [seven];
+    final e = engineWith(s);
+    final moves = e.movesForCard(0, seven);
+    final splits = moves.where((m) => m.kind == MoveKind.split).toList();
+    expect(splits.length, 12); // 6 splits × 2 orders
+    final mv = splits.firstWhere((m) => m.steps == 3 && m.marble!.idx == 0);
+    e.apply(mv);
+    expect(s.marbles[0][0], 5);
+    expect(s.marbles[0][1], 24);
+  });
+
+  test('king burns every marble on its path', () {
+    final s = fresh();
+    s.marbles[0][0] = 10;
+    s.marbles[1][0] = Pos.rel(1, Pos.abs(0, 14));
+    s.marbles[3][0] = Pos.rel(3, Pos.abs(0, 20));
+    s.hands[0] = [king];
+    final e = engineWith(s);
+    final mv = e.movesForCard(0, king).firstWhere((m) => m.kind == MoveKind.advance);
+    e.apply(mv);
+    expect(s.marbles[0][0], 23);
+    expect(s.marbles[1][0], Pos.base);
+    expect(s.marbles[3][0], Pos.base);
+    expect(s.captures[0], 2);
+  });
+
+  test('finished player controls partner marbles', () {
+    final s = fresh();
+    for (var i = 0; i < 4; i++) {
+      s.marbles[0][i] = Pos.home(i);
+    }
+    s.marbles[2][0] = 3;
+    s.hands[0] = [two];
+    final mv = engineWith(s).legalMoves(0).single;
+    expect(mv.marble, const MarbleRef(2, 0));
+    expect(mv.to, 5);
+  });
+
+  test('team wins when all eight marbles are home', () {
+    final s = fresh();
+    for (var i = 0; i < 4; i++) {
+      s.marbles[0][i] = Pos.home(i);
+    }
+    for (var i = 1; i < 4; i++) {
+      s.marbles[2][i] = Pos.home(i);
+    }
+    s.marbles[2][0] = GameConfig.trackLength - 1;
+    s.hands[0] = [ace];
+    final e = engineWith(s);
+    final mv = e.movesForCard(0, ace).firstWhere((m) => m.to == Pos.home(0));
+    e.apply(mv);
+    expect(s.winnerTeam, 0);
+    expect(s.isOver, isTrue);
+  });
+
+  test('new round is dealt when all hands are empty', () {
+    final s = fresh();
+    final e = engineWith(s);
+    e.startGame();
+    for (var t = 0; t < 16; t++) {
+      final seat = s.turn;
+      final mv = e.legalMoves(seat).first;
+      e.apply(mv);
+    }
+    expect(s.round, 2);
+    expect(s.hands.every((h) => h.length == 4), isTrue);
+  });
+
+  test('json round-trip', () {
+    final s = fresh();
+    engineWith(s).startGame();
+    s.marbles[0][0] = 7;
+    final back = GameState.fromJson(s.toJson());
+    expect(back.marbles[0][0], 7);
+    expect(back.hands[2], s.hands[2]);
+    expect(back.rules.jackSwapAny, isTrue);
+  });
+
+  test('bots can play a full game to the end', () {
+    final s = GameState.fresh(
+      List.generate(4, (i) => PlayerSlot(seat: i, name: 'B$i', isBot: true)),
+      const RuleSet(),
+    );
+    final e = JackarooEngine(s, seed: 42);
+    final bot = BotEngine(e, seed: 42);
+    e.startGame();
+    var guard = 0;
+    while (!s.isOver && guard++ < 5000) {
+      e.apply(bot.choose(s.turn, BotLevel.hard));
+    }
+    expect(s.isOver, isTrue, reason: 'game should finish within 5000 moves');
+  });
+}
